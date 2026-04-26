@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+
+# Environment secrets
+.env
+
+# Runtime state (git-ignored by design)
+.terminalforge/state.json
+.terminalforge/messages.log
+.terminalforge/handoffs.md
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+venv/
+.venv/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+npm-debug.log*
+
+# Test coverage
+coverage/
+.nyc_output/
