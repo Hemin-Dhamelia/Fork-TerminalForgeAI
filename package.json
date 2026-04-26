@@ -1,0 +1,26 @@
+{
+  "name": "terminalforge",
+  "version": "1.0.0",
+  "description": "macOS terminal-based multi-agent AI development platform",
+  "type": "module",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "start": "node bridge/server.js",
+    "test": "node --experimental-vm-modules node_modules/.bin/jest",
+    "test:switch": "node tests/test-switch.js",
+    "lint": "eslint . --ext .js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "debug": "^4.3.4",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "simple-git": "^3.25.0"
+  },
+  "devDependencies": {
+    "eslint": "^9.0.0",
+    "jest": "^29.7.0"
+  }
+}

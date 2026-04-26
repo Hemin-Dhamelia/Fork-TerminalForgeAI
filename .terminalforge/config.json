@@ -1,0 +1,8 @@
+{
+  "maxSteps": 20,
+  "voiceMode": "push-to-talk",
+  "ttsEnabled": false,
+  "ttsProvider": "macos-say",
+  "debounceMs": 300,
+  "contextHandoffCount": 3
+}
