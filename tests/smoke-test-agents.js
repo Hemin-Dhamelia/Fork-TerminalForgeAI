@@ -8,7 +8,9 @@
  * Optional: node tests/smoke-test-agents.js 2   (test only terminal 2)
  */
 
-import 'dotenv/config';
+import { config } from 'dotenv';
+import { resolve } from 'path';
+config({ path: resolve(process.cwd(), '.env'), override: true });
 import { routePrompt, clearHistory } from '../core/agent-router.js';
 import { writeState } from '../core/state.js';
 
