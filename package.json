@@ -8,8 +8,13 @@
   },
   "scripts": {
     "start": "node bridge/server.js",
+    "launch": "bash scripts/launch.sh",
+    "launch:tmux": "bash scripts/tmux-layout.sh",
+    "agent": "node scripts/agent-repl.js",
     "test": "node --experimental-vm-modules node_modules/.bin/jest",
     "test:switch": "node tests/test-switch.js",
+    "test:agents": "node tests/test-agents.js",
+    "test:smoke": "node tests/smoke-test-agents.js",
     "lint": "eslint . --ext .js"
   },
   "dependencies": {
