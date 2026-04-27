@@ -1,3 +1,6 @@
+# Claude Code internal (worktrees, session data)
+.claude/
+
 # Dependencies
 node_modules/
 
