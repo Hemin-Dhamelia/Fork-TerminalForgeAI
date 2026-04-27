@@ -1,0 +1,325 @@
+# TerminalForge — Project Plan v4.0
+
+**Multi-Agent AI Development Platform**
+Voice + Text Input · Volume Button Switching · Agent-to-Agent Communication
+*Project Plan v4.0 · April 2026*
+
+**GitHub Repositories**
+- Fork (Working Copy): https://github.com/Hemin-Dhamelia/Fork-TerminalForgeAI.git
+- Upstream Main Repo: https://github.com/TerminalForgeAI/TerminalForgeAI.git
+
+---
+
+## 1. Executive Summary
+
+TerminalForge is a macOS terminal-based multi-agent AI development platform. Five specialized AI agents — Junior Developer, Senior Developer, QA Engineer, DevOps Engineer, and Project Manager — run as a unified team in a single terminal session, each powered by the Anthropic Claude API with distinct system prompts and memory.
+
+You interact with the agents by typing commands as text or by speaking using real-time voice input transcribed by faster-whisper. You navigate between agent terminals using your iPhone's physical Volume buttons — Volume DOWN steps forward (Terminal 1→2→3→4→5), Volume UP steps backward (5→4→3→2→1), wrapping around at each end.
+
+The agents communicate through a shared in-process message bus. The Project Manager agent acts as orchestrator in Autonomous Mode, automatically dispatching tasks to the appropriate agents and routing work through a full development pipeline.
+
+### 1A. GitHub Repository Structure
+
+TerminalForge uses a forked repository workflow:
+
+- Fork (working copy): https://github.com/Hemin-Dhamelia/Fork-TerminalForgeAI.git
+- Upstream main repo: https://github.com/TerminalForgeAI/TerminalForgeAI.git
+- All feature development happens on branches in the fork
+- Pull Requests are opened from Hemin-Dhamelia/Fork-TerminalForgeAI → TerminalForgeAI/TerminalForgeAI
+- Upstream sync: `git fetch upstream && git rebase upstream/main` before starting new work
+
+**Branch naming convention:**
+- `feature/phase1-event-listener`
+- `feature/phase2-agent-engine`
+- `fix/<short-description>`
+- `chore/<short-description>`
+
+---
+
+## 2. Project Goals
+
+- Hardware-controlled agent switching via iPhone Volume buttons (DOWN = forward, UP = backward)
+- Voice and text input — speak or type to any agent, switch between modes at any time
+- Full-stack AI dev team in a single macOS terminal session
+- Context continuity — each agent retains session memory and reads shared project context
+- Agent-to-agent communication — PM orchestrates the full team autonomously
+- Universal project support — build any app type: web, API, CLI, mobile backend, scripts, infra
+- Zero-friction UX — no mouse needed; hardware button = agent switch; voice or typing = input
+
+### Out of Scope (v1)
+- GUI or web-based interface — terminal-only in v1
+- Simultaneous multi-agent output — one agent active at a time
+- Windows or Linux support — macOS-first; Linux planned for v2
+- Fine-tuned custom models — uses Claude API with crafted system prompts
+
+---
+
+## 3. Agent Terminals & Volume Button Navigation
+
+| Terminal | Agent | Core Responsibilities | What It Produces |
+|---|---|---|---|
+| Terminal 1 | Junior Developer | Code scaffolding, feature implementation, unit tests, bug fixes | Code files, linter runs, git commits |
+| Terminal 2 | Senior Developer | Architecture, code review, complex problem-solving | PR reviews, schemas, design patterns |
+| Terminal 3 | QA Engineer | Test plan creation, test generation, regression testing, bug reports | Test suites, test runner output, bug issues |
+| Terminal 4 | DevOps Engineer | CI/CD, Docker, infra-as-code, deploy scripts, monitoring | Dockerfiles, GitHub Actions YAML, Terraform |
+| Terminal 5 | Project Manager | PRD → tickets, sprint planning, orchestration, summaries | Task dispatches, progress tracking, summaries |
+
+**Navigation:**
+- Volume DOWN cycles forward: Terminal 1 → 2 → 3 → 4 → 5 → wraps back to 1
+- Volume UP cycles backward: Terminal 5 → 4 → 3 → 2 → 1 → wraps back to 5
+- Hold either button 2 seconds: toggle Autonomous Mode on/off
+
+---
+
+## 4. Input Modes: Text & Voice
+
+### 4.1 Text Input
+
+The always-available default mode. Type your prompt in the terminal. Supports multi-line input, code paste, file paths, and structured data. Zero additional latency.
+
+### 4.2 Voice Input
+
+Speak your prompt into your Mac's microphone. The system detects voice with silero-vad, transcribes it locally using faster-whisper (no network, no cost), and sends the text to the active agent. A live transcription preview appears in the TUI as you speak.
+
+| Mode | How It Works | Best For |
+|---|---|---|
+| Push-to-Talk | Hold F5 while speaking; release to send | Most reliable. No false activations. Build this first. |
+| Wake Word | Say 'Hey Forge' to activate, speak, silence to send | Fully hands-free. Needs openWakeWord model. |
+| Auto-VAD | System always listens; detects speech start/end | Easiest UX. Slight false-positive risk in noise. |
+| Text Fallback | Type directly in the terminal | Always available. Best for code and long pastes. |
+
+---
+
+## 5. Full Technology Stack
+
+| Layer | Technology | Purpose |
+|---|---|---|
+| AI / Agents | Anthropic Claude API — claude-sonnet-4-5 (streaming) | Per-agent system prompts, tool use, multi-turn memory |
+| Voice STT | faster-whisper (local, CTranslate2) | Local offline transcription, < 2s latency, no cost |
+| Voice Activity | silero-vad (Python) | Accurate speech start/end detection in noisy environments |
+| Wake Word | openWakeWord — 'Hey Forge' | Triggers listening; low false-positive rate |
+| Voice TTS | ElevenLabs API or macOS say | Agent voice output; off by default |
+| Terminal UI | Ink (React-for-terminal, Node.js) | Agent badge, mode indicator, streaming output |
+| iPhone Bridge | iOS Shortcuts → HTTP POST → localhost:3333 | Volume button events reach the Mac daemon |
+| macOS Listener | Node.js Express daemon | Receives button events; updates state.json |
+| Message Bus | Node.js EventEmitter (in-process) | Agent-to-agent routing; no external broker needed |
+| Shared Context | JSON + Markdown flat files in .terminalforge/ | Project state, tasks, handoffs readable by all agents |
+| Git Integration | simple-git (Node.js) | Injects diff, log, status into agent context on switch |
+| Runtime | Node.js 18+ and Python 3.11+ | Monorepo: /core /agents /voice /bridge /ui |
+
+---
+
+## 6. System Architecture
+
+### 6.1 Component Overview
+
+- **Bluetooth Bridge (iPhone → Mac):** iOS Shortcut detects volume button presses and POSTs JSON to localhost:3333
+- **macOS Event Listener Daemon:** Node.js daemon receives events, updates active terminal index, writes state.json
+- **Agent REPL Engine:** five stateful Claude API sessions with distinct system prompts, tools, and rolling history
+- **Shared Context Store:** project.md, open_tasks.json, handoffs.md in .terminalforge/ injected into each agent call
+- **Message Bus:** in-process EventEmitter; JSON envelope `{ from, to, type, payload, taskId, timestamp }`
+- **Terminal UI:** Ink/Textual TUI — active agent badge, mode indicator (Manual/Auto), voice status, streaming output
+- **Voice Layer:** mic → silero-vad → faster-whisper → text → active agent; optional TTS response
+
+### 6.2 Repository Structure
+
+```
+/core        — event listener, agent router, message bus, context manager, state.js
+/agents      — one file per agent: system prompt, tools config, memory scope
+/voice       — silero-vad integration, faster-whisper wrapper, TTS output handler
+/bridge      — iOS Shortcuts HTTP endpoint, volume event parser, hotkey fallback
+/ui          — Ink TUI components: agent panel, badge, streaming output, voice indicator
+/scripts     — launch.sh, tmux-layout.sh, agent-repl.js (launcher scripts)
+/docs        — project plan, Claude Code prompt, quickstart guide
+/.terminalforge — runtime: state.json, messages.log, project.md, open_tasks.json, handoffs.md
+```
+
+---
+
+## 7. Agent-to-Agent Communication
+
+### 7.1 Two Operating Modes
+
+**Manual Mode:** you are the orchestrator. Switch agents with volume buttons. Each agent waits for your explicit prompt. Best for focused work and debugging.
+
+**Autonomous Mode:** activated by holding either volume button for 2 seconds. Give a high-level goal; the PM Agent breaks it into tasks and dispatches each to the correct agent. You can intervene at any time.
+
+### 7.2 Message Routing Map
+
+| From | To | Message / Handoff Content |
+|---|---|---|
+| PM Agent | Junior Developer | Dispatches implementation tasks with file paths and acceptance criteria |
+| PM Agent | Senior Developer | Assigns architecture decisions or high-complexity features |
+| PM Agent | QA Engineer | Triggers test generation once feature branch is marked complete |
+| PM Agent | DevOps Engineer | Requests pipeline/deploy setup when code is merged to main |
+| Junior Developer | Senior Developer | Escalates blockers for senior review |
+| Senior Developer | Junior Developer | Returns reviewed code with inline fix instructions |
+| Senior Developer | QA Engineer | Notifies QA when feature is code-complete and ready for testing |
+| QA Engineer | Junior Developer | Files bug report with repro steps, expected vs actual, severity |
+| QA Engineer | Senior Developer | Escalates architectural bugs requiring senior investigation |
+| DevOps Engineer | Senior Developer | Requests confirmation before infra changes affecting app config |
+
+---
+
+## 7B. Terminal Colour System — Task State Indicator
+
+Every agent terminal must visually reflect the current task state through background colour. This is a core UX feature built into the TUI, not optional styling. The colour applies to the entire terminal panel — header, badge, and streaming output area all change together in real time.
+
+### Colour Rules
+
+| Task State | Terminal Colour | Ink Class | When It Fires |
+|---|---|---|---|
+| idle | Default (no colour) | none | Agent is waiting for a prompt — no active task |
+| working | YELLOW | bgYellow | Fires immediately when a task is dispatched to this agent — before the first token streams |
+| done | GREEN | bgGreen | Fires within < 100ms of a task:done event — task completed successfully |
+| failed | RED | bgRed | Fires immediately on task:failed or any unhandled API error — needs attention or retry |
+
+- Yellow fires immediately when a task is dispatched — before the first streaming token appears
+- Green fires within < 100ms of a task:done event — no perceptible delay
+- Red fires immediately on task:failed or unhandled Claude API error
+- Switching away from a terminal mid-task does NOT reset its colour — it stays yellow in the sidebar
+- The sidebar always shows all 5 terminals with their colour so the user can see full team status at a glance
+- Colour resets to idle (default) only when a new task is dispatched, or when the user runs `reset agent`
+
+### State Stored in `.terminalforge/state.json`
+
+`terminalStatus` is added as a new field — one entry per terminal:
+
+```json
+{
+  "activeTerminal": 2,
+  "mode": "manual",
+  "lastSwitch": "2026-04-27T10:00:00Z",
+  "autonomousStepCount": 0,
+  "terminalStatus": {
+    "1": "idle",
+    "2": "working",
+    "3": "done",
+    "4": "failed",
+    "5": "idle"
+  }
+}
+```
+
+### Events that Drive Colour State (wired to message bus)
+
+| Event | Colour Transition | State Written |
+|---|---|---|
+| task:dispatched | Any colour → YELLOW | terminalStatus[N] = "working" |
+| task:done | Yellow → GREEN | terminalStatus[N] = "done" |
+| task:failed | Yellow → RED | terminalStatus[N] = "failed" |
+| agent:reset | Any colour → Default | terminalStatus[N] = "idle" |
+
+### Sidebar: All 5 Terminals at a Glance
+
+When the user is on any active terminal, the sidebar always shows the colour status of all 5 terminals:
+
+```
+┌─ TERMINALS ─────────────┐
+│ [T1]  Junior Dev   IDLE │
+│ [T2]  Senior Dev   ████ │  ← active, yellow if working
+│ [T3]  QA Engineer  ████ │  ← green if done
+│ [T4]  DevOps       ████ │  ← red if failed
+│ [T5]  PM           IDLE │
+└─────────────────────────┘
+```
+
+### New UI File: `ui/TerminalColorManager.js`
+
+Built in Phase 4 alongside the rest of the TUI. Wired to message bus events in Phase 5. Reads `terminalStatus` from state.json and returns the correct Ink background class and label per terminal.
+
+```javascript
+export const STATUS_COLOURS = {
+  idle:    { bg: '',         label: ''        },
+  working: { bg: 'bgYellow', label: 'WORKING' },
+  done:    { bg: 'bgGreen',  label: 'DONE'    },
+  failed:  { bg: 'bgRed',    label: 'FAILED'  },
+};
+
+export function getTerminalColour(terminalIndex, terminalStatus) {
+  const status = terminalStatus[String(terminalIndex)] || 'idle';
+  return STATUS_COLOURS[status];
+}
+```
+
+---
+
+## 8. Typical Development Workflow
+
+### 8.1 Starting a New Project (Manual Mode)
+
+- Hold either vol button 2s → PM Agent (Terminal 5) → describe project by voice or text → receive PRD + task list
+- Vol DOWN → Terminal 1: Junior Dev → confirm architecture, create folder scaffold
+- Navigate to Terminal 1 → implement feature by feature, committing after each
+- Vol DOWN to Terminal 3 (QA) → generate test cases, run tests, file bugs back to Junior Dev
+- Vol DOWN to Terminal 4 (DevOps) → write Dockerfile, CI pipeline YAML, deployment script
+- Vol UP back to Terminal 5 (PM) → sprint review summary, mark tasks done, plan next iteration
+
+### 8.2 Autonomous Mode (Hands-Free)
+
+- Hold either volume button for 2s → Autonomous Mode activates (TUI badge changes to AUTO)
+- Speak or type a high-level goal: *'Build a CRUD REST API with user auth and PostgreSQL'*
+- PM Agent generates task list and begins dispatching automatically
+- Watch the pipeline execute in the TUI; all agent messages visible in the sidebar
+- Interrupt at any time by holding either volume button → returns to Manual Mode immediately
+
+---
+
+## 9. Project Roadmap
+
+| Phase | Name | Timeline | Key Deliverables | Milestone |
+|---|---|---|---|---|
+| ✅ Phase 1 | Foundation | Weeks 1–2 | Bluetooth bridge, vol event listener, Claude API streaming test | Core infra |
+| ✅ Phase 2 | Agent Engine | Weeks 3–4 | 5 agent sessions w/ system prompts, shared context store, git integration | Agents live |
+| 🔜 Phase 3 | Voice Layer | Week 5 | Mic → faster-whisper → agent prompt; silero-vad; wake word; optional TTS | Voice works |
+| 🔜 Phase 4 | TUI + Colour | Week 6 | Ink TUI: agent badge, mode indicator, streaming output; terminal colour system; vol button wired end-to-end | Full UX ready |
+| 🔜 Phase 5 | Agent Comms | Week 7 | Message bus, PM orchestrator loop, auto-dispatch, agent handoff protocol; colour events wired | Agents talk |
+| 🔜 Phase 6 | Polish & Docs | Week 8 | Error handling, logging, onboarding guide, demo project (full web app built end-to-end) | Shippable v1 |
+
+Total: 8 weeks from kickoff to shippable v1. Prototype (voice + switching, no agent comms): 2–3 weeks.
+
+---
+
+## 10. Risks & Mitigations
+
+| Risk | Likelihood | Mitigation | Residual Risk |
+|---|---|---|---|
+| Bluetooth latency on vol events | Medium | Use macOS AVAudioSession native hook instead of BT vol intercept | Low |
+| Whisper STT latency on long sentences | Medium | Use faster-whisper local; stream chunks; show 'Listening…' in TUI | Low |
+| Context window overflow between agents | High | Rolling summary store; inject only relevant context per agent per call | Low |
+| Agent infinite loop in orchestrated mode | Medium | PM agent max-step budget (default 20); user interrupt by holding vol button | Low |
+| Voice false activation in noisy environment | Medium | Default Push-to-Talk; VAD sensitivity configurable in config.json | Low |
+| macOS API changes break volume hook | Low | Thin abstraction wrapper; document tested macOS versions (14.x, 15.x) | Very Low |
+| System prompt drift on long sessions | Medium | Pin system prompts per agent; add session-reset command ('reset agent') | Low |
+
+---
+
+## 11. Success Metrics
+
+- **Terminal colour system:** yellow fires in < 50ms of task dispatch, green/red in < 100ms of task resolution
+- **Agent switch latency:** < 500ms from volume button press to new agent active in terminal
+- **Voice transcription accuracy:** > 95% word accuracy in home/office environment
+- **Voice-to-agent latency:** < 2 seconds from end of speech to agent receiving the prompt
+- **Autonomous pipeline:** PM agent routes a feature request through all 5 agents without manual switching
+- **End-to-end build:** a full CRUD web app can be scaffolded, tested, and containerised using only TerminalForge
+- **Context retention:** agents correctly reference prior outputs and handoff notes 95%+ of the time
+- **Zero mouse required:** entire session operable with only voice/keyboard + volume buttons
+
+---
+
+## 12. Immediate Next Steps
+
+- Set up Anthropic API key; test claude-sonnet-4-5 streaming in terminal with a basic system prompt
+- Clone fork: `git clone https://github.com/Hemin-Dhamelia/Fork-TerminalForgeAI.git`
+- Add upstream: `git remote add upstream https://github.com/TerminalForgeAI/TerminalForgeAI.git`
+- Build `core/state.js` + `bridge/server.js` (Express :3333 for vol button events)
+- Install faster-whisper + silero-vad; test mic input → transcription in under 2 seconds
+- Build iOS Shortcut that POSTs volume events to Mac localhost:3333; confirm receipt in Node daemon
+- Write 5 system prompts (one per agent); test each in isolation with representative sample tasks
+- Build minimal TUI showing active agent badge and streaming output panel
+- Wire voice input to active agent: speak a prompt → see live transcription → get streamed response
+- Implement message bus and PM orchestrator; test a 3-agent pipeline (PM → Junior → QA)
+- Integrate git context injection; test that Senior Dev can see current diff and commit history
+
+**Estimated time to working voice prototype (Phase 1–3):** 3 weeks
+**Estimated time to full autonomous multi-agent pipeline (all 6 phases):** 8 weeks

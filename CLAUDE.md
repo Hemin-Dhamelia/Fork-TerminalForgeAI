@@ -39,32 +39,40 @@ terminalforge/
 │   ├── handoffs.md            ← cross-agent handoff notes
 │   └── config.json            ← user config (max steps, voice mode, etc.)
 ├── core/
-│   ├── state.js               ← state.json read/write
-│   ├── event-listener.js      ← consumes vol events, emits agent:switch
-│   ├── agent-router.js        ← routes prompts to correct Claude session
-│   ├── message-bus.js         ← EventEmitter message bus
-│   └── context-manager.js     ← injects shared context into agent calls
+│   ├── state.js               ✅ BUILT — state.json read/write + navigation logic
+│   ├── event-listener.js      ✅ BUILT — consumes vol events, emits agent:switch
+│   ├── agent-router.js        ✅ BUILT — routes prompts to correct Claude session, streaming
+│   ├── message-bus.js         ← EventEmitter message bus (Phase 5)
+│   └── context-manager.js     ✅ BUILT — injects shared context into agent calls
 ├── agents/
-│   ├── junior-dev.js
-│   ├── senior-dev.js
-│   ├── qa-engineer.js
-│   ├── devops-engineer.js
-│   └── project-manager.js     ← includes PM orchestrator loop
+│   ├── junior-dev.js          ✅ BUILT — system prompt + tools config
+│   ├── senior-dev.js          ✅ BUILT — system prompt + tools config
+│   ├── qa-engineer.js         ✅ BUILT — system prompt + tools config
+│   ├── devops-engineer.js     ✅ BUILT — system prompt + tools config
+│   └── project-manager.js     ✅ BUILT — system prompt + orchestrator config (loop: Phase 5)
+├── scripts/                   ← NEW (launcher scripts, beyond original plan)
+│   ├── launch.sh              ✅ BUILT — opens 6 terminal windows (bridge + 5 agents)
+│   ├── tmux-layout.sh         ✅ BUILT — tmux 6-window layout alternative
+│   └── agent-repl.js          ✅ BUILT — interactive per-agent REPL with streaming output
 ├── voice/
-│   ├── vad.py                 ← silero-vad
-│   ├── transcriber.py         ← faster-whisper wrapper
-│   ├── wake-word.py           ← openWakeWord "Hey Forge"
-│   └── tts.py                 ← ElevenLabs / macOS say
+│   ├── vad.py                 ← silero-vad (Phase 3)
+│   ├── transcriber.py         ← faster-whisper wrapper (Phase 3)
+│   ├── wake-word.py           ← openWakeWord "Hey Forge" (Phase 3)
+│   └── tts.py                 ← ElevenLabs / macOS say (Phase 3)
 ├── bridge/
-│   ├── server.js              ← HTTP :3333, receives vol button POST events
-│   └── hotkey-fallback.js     ← keyboard shortcut fallback
+│   ├── server.js              ✅ BUILT — HTTP :3333, receives vol button POST events
+│   └── hotkey-fallback.js     ← keyboard shortcut fallback (Phase 3)
+├── tests/
+│   ├── test-switch.js         ✅ BUILT — Phase 1, 19 tests passing
+│   ├── test-agents.js         ✅ BUILT — Phase 2, 47 tests passing
+│   └── smoke-test-agents.js   ✅ BUILT — Phase 2, live Claude API streaming test
 └── ui/
-    ├── App.js                 ← root Ink component
-    ├── AgentBadge.js
-    ├── ModeIndicator.js
-    ├── StreamPanel.js
-    ├── VoiceIndicator.js
-    └── TerminalColorManager.js  ← task state → terminal background colour
+    ├── App.js                 ← root Ink component (Phase 4)
+    ├── AgentBadge.js          ← active agent badge (Phase 4)
+    ├── ModeIndicator.js       ← MANUAL / AUTO badge (Phase 4)
+    ├── StreamPanel.js         ← streaming agent output (Phase 4)
+    ├── VoiceIndicator.js      ← listening / transcribing status (Phase 4)
+    └── TerminalColorManager.js ← task state → terminal background colour (Phase 4)
 ```
 
 ---
@@ -145,7 +153,7 @@ git push origin feature/<branch-name>
 {
   "activeTerminal": 1,
   "mode": "manual",
-  "lastSwitch": "2026-04-25T10:00:00Z",
+  "lastSwitch": "2026-04-27T10:00:00Z",
   "autonomousStepCount": 0,
   "terminalStatus": {
     "1": "idle",
@@ -196,7 +204,7 @@ All agent-to-agent messages use this JSON envelope:
   "type": "escalation",
   "payload": "Stuck on JWT refresh token logic — need senior review",
   "taskId": "task-042",
-  "timestamp": "2026-04-25T10:30:00Z"
+  "timestamp": "2026-04-27T10:30:00Z"
 }
 ```
 
@@ -316,15 +324,40 @@ Built in Phase 4 (TUI). Wired to message bus events in Phase 5.
 
 ## Current Build Phase
 
-> **Phase 1: Foundation — IN PROGRESS**
+> **Phase 3: Voice Layer — NEXT**
 
-Next file to build: `core/state.js` then `bridge/server.js`
+### ✅ Phase 1: Foundation — COMPLETE
+- `core/state.js`, `bridge/server.js`, `core/event-listener.js`
+- 19 tests passing — all navigation + state persistence + debounce verified
+- Success criteria confirmed: Vol DOWN 3× → 1→2→3, Vol UP wraps, state persists
 
-Do NOT move to Phase 2 until Phase 1 success criteria are confirmed:
-- Vol DOWN 3× advances terminal 1→2→3
-- Vol UP from 3 returns to 2, then 1, then 5 (wrap)
-- State persists correctly in `state.json`
-- Anthropic API streaming test passes in terminal
+### ✅ Phase 2: Agent Engine — COMPLETE
+- All 5 agent files with system prompts and identity configs
+- `core/agent-router.js` — streaming Claude API sessions, 20-msg rolling history per terminal
+- `core/context-manager.js` — git + handoffs + tasks + messages injected per call
+- 47 tests passing + live smoke test against real Claude API
+
+### ✅ Launcher Scripts — COMPLETE (bonus, beyond original plan)
+- `scripts/launch.sh` — auto-opens 6 terminal windows (iTerm2 or Terminal.app)
+- `scripts/tmux-layout.sh` — tmux 6-window layout
+- `scripts/agent-repl.js` — interactive REPL with coloured streaming output
+
+### 🔜 Phase 3: Voice Layer — NEXT
+Files to build: `voice/vad.py`, `voice/transcriber.py`, `voice/wake-word.py`, `voice/tts.py`, `bridge/hotkey-fallback.js`
+
+Do NOT move to Phase 4 until Phase 3 success criteria are confirmed:
+- Hold F5, speak, release → transcribed text sent to active agent
+- Transcription latency < 2 seconds end-to-end
+- Works fully offline (local faster-whisper model)
+
+### 🔜 Phase 4: TUI
+Files to build: all `ui/*.js` components using Ink (React-for-terminal)
+
+### 🔜 Phase 5: Agent Communication
+Files to build: `core/message-bus.js`, PM orchestrator loop in `agents/project-manager.js`
+
+### 🔜 Phase 6: Polish
+Error handling, retry logic, `docs/QUICKSTART.md`, end-to-end demo
 
 ---
 
@@ -341,11 +374,27 @@ Do NOT move to Phase 2 until Phase 1 success criteria are confirmed:
 ## Useful Commands
 
 ```bash
-# Start the bridge server
+# Launch all 5 agents + bridge server (opens terminal windows automatically)
+npm run launch
+
+# Launch using tmux (6 windows in one terminal)
+npm run launch:tmux
+
+# Open a single agent REPL manually
+npm run agent 1   # Junior Developer
+npm run agent 2   # Senior Developer
+npm run agent 3   # QA Engineer
+npm run agent 4   # DevOps Engineer
+npm run agent 5   # Project Manager
+
+# Start the bridge server only
+npm start
 node bridge/server.js
 
 # Simulate a volume press (test)
 curl -X POST http://localhost:3333/volume -H "Content-Type: application/json" -d '{"button":"down"}'
+curl -X POST http://localhost:3333/volume -H "Content-Type: application/json" -d '{"button":"up"}'
+curl -X POST http://localhost:3333/volume -H "Content-Type: application/json" -d '{"button":"hold"}'
 
 # Check current state
 cat .terminalforge/state.json
@@ -353,9 +402,20 @@ cat .terminalforge/state.json
 # Watch message log live
 tail -f .terminalforge/messages.log
 
-# Run all tests
-npm test
+# Run tests
+npm run test:switch    # Phase 1 — navigation + state tests (19 tests)
+npm run test:agents    # Phase 2 — agent unit tests (47 tests)
+npm run test:smoke     # Phase 2 — live Claude API streaming test (requires .env)
 
 # Lint
 npm run lint
+
+# Kill the bridge server
+kill $(lsof -ti:3333)
+
+# Kill all TerminalForge processes
+kill $(lsof -ti:3333) && pkill -f "agent-repl.js"
+
+# Kill tmux session
+tmux kill-session -t terminalforge
 ```
