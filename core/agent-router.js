@@ -1,4 +1,8 @@
-import 'dotenv/config';
+import { config } from 'dotenv';
+import { resolve } from 'path';
+import { dirname, join } from 'path';
+import { fileURLToPath } from 'url';
+config({ path: resolve(dirname(fileURLToPath(import.meta.url)), '..', '.env'), override: true });
 import Anthropic from '@anthropic-ai/sdk';
 import createDebug from 'debug';
 import { readState } from './state.js';

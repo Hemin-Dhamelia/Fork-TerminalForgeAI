@@ -1,4 +1,7 @@
-import 'dotenv/config';
+import { config } from 'dotenv';
+import { resolve, dirname } from 'path';
+import { fileURLToPath } from 'url';
+config({ path: resolve(dirname(fileURLToPath(import.meta.url)), '..', '.env'), override: true });
 import express from 'express';
 import createDebug from 'debug';
 import { switchTerminal, toggleMode, readState } from '../core/state.js';
