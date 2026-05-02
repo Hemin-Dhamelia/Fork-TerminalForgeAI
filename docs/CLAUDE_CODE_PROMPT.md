@@ -48,12 +48,13 @@ A macOS terminal platform where:
 - **Voice input** via faster-whisper (local STT) + silero-vad + optional wake word "Hey Forge"
 - **Text input** always available as fallback
 - **Agent-to-agent communication** via in-process EventEmitter message bus
+- **Bus Monitor** — a dedicated 7th terminal window showing all inter-agent traffic in real time
 - **Autonomous Mode**: PM agent orchestrates the full team automatically
 - Each agent has its own system prompt, memory, tools, and Claude API session
 
 ---
 
-## CURRENT PROJECT STATE (as of 2026-04-27)
+## CURRENT PROJECT STATE (as of 2026-05-02)
 
 ### ✅ Phase 1: Foundation — COMPLETE
 All files built, tested, and merged to main via PR.
@@ -85,13 +86,23 @@ All files built, tested, and merged to main via PR.
 
 | File | Status |
 |---|---|
-| `scripts/launch.sh` | ✅ auto-opens 6 terminal windows — bridge server + 5 agent REPLs (iTerm2 or Terminal.app) |
-| `scripts/tmux-layout.sh` | ✅ tmux session with 6 windows |
-| `scripts/agent-repl.js` | ✅ interactive per-agent REPL, coloured streaming output, /clear /status /quit |
+| `scripts/launch.sh` | ✅ auto-opens 7 windows — bridge server + 5 agent REPLs + bus monitor (iTerm2 or Terminal.app) |
+| `scripts/tmux-layout.sh` | ✅ tmux session with 7 windows (windows 0–6) |
+| `scripts/agent-repl.js` | ✅ per-agent REPL: coloured streaming output, /clear /status /quit /msg /reply |
+
+### ✅ Observability Layer — COMPLETE (bonus, early Phase 5 foundation)
+
+| File | Status |
+|---|---|
+| `core/message-bus.js` | ✅ EventEmitter bus — publish/subscribe/subscribeAll/readLog/getUnread; validates from/to/type; appends to messages.log |
+| `scripts/bus-monitor.js` | ✅ live traffic monitor — replays last 20 msgs, subscribeAll fan-out, 500ms log poll, status bar |
+| `scripts/agent-repl.js` | ✅ updated — incoming messages displayed inline with colour-coded banners; /msg and /reply commands |
+
+All message flow tests passing: targeted delivery, subscribeAll fan-out, log persistence, invalid-agent rejection, invalid-type rejection.
 
 ### 🔜 Phase 3: Voice Layer — NEXT
 ### 🔜 Phase 4: TUI (Ink)
-### 🔜 Phase 5: Agent Communication (Message Bus)
+### 🔜 Phase 5: Agent Communication (message bus ✅ done — PM orchestrator loop remaining)
 ### 🔜 Phase 6: Polish
 
 ---
@@ -101,10 +112,11 @@ All files built, tested, and merged to main via PR.
 ```
 terminalforge/
 ├── CLAUDE.md                    ← Project rules for Claude Code
+├── README.md                    ✅ BUILT — project overview + quickstart
 ├── package.json                 ← Root package (Node.js)
 ├── .terminalforge/              ← Runtime state (git-ignored)
-│   ├── state.json               ← Active terminal index + mode
-│   ├── messages.log             ← Agent-to-agent message log
+│   ├── state.json               ← Active terminal index + mode + terminalStatus
+│   ├── messages.log             ← Agent-to-agent message log (newline-delimited JSON)
 │   ├── project.md               ← Current project description
 │   ├── open_tasks.json          ← Task list
 │   ├── handoffs.md              ← Cross-agent handoff notes
@@ -112,7 +124,7 @@ terminalforge/
 ├── core/
 │   ├── event-listener.js        ✅ BUILT
 │   ├── agent-router.js          ✅ BUILT
-│   ├── message-bus.js           ← Phase 5
+│   ├── message-bus.js           ✅ BUILT — EventEmitter bus, publish/subscribe/subscribeAll
 │   ├── context-manager.js       ✅ BUILT
 │   └── state.js                 ✅ BUILT
 ├── agents/
@@ -122,9 +134,10 @@ terminalforge/
 │   ├── devops-engineer.js       ✅ BUILT
 │   └── project-manager.js       ✅ BUILT
 ├── scripts/
-│   ├── launch.sh                ✅ BUILT
-│   ├── tmux-layout.sh           ✅ BUILT
-│   └── agent-repl.js            ✅ BUILT
+│   ├── launch.sh                ✅ BUILT — 7 windows (bridge + 5 agents + bus monitor)
+│   ├── tmux-layout.sh           ✅ BUILT — 7 tmux windows (Ctrl+B 0-6)
+│   ├── agent-repl.js            ✅ BUILT — /msg /reply inline message display
+│   └── bus-monitor.js           ✅ BUILT — live inter-agent traffic monitor
 ├── voice/
 │   ├── vad.py                   ← Phase 3
 │   ├── transcriber.py           ← Phase 3
@@ -191,8 +204,6 @@ Every agent terminal must visually reflect the current task state through backgr
 
 ### State stored in `state.json`
 
-Add `taskStatus` per terminal:
-
 ```json
 {
   "activeTerminal": 2,
@@ -252,6 +263,65 @@ This is built in Phase 4 (TUI) and wired to the message bus events in Phase 5.
 
 ---
 
+## MESSAGE BUS — BUILT (core/message-bus.js)
+
+The message bus is the backbone of agent-to-agent communication. It is already implemented.
+
+### Envelope format
+
+```json
+{
+  "id": "msg-1777750172857-kkwm",
+  "from": "junior-dev",
+  "to": "senior-dev",
+  "type": "escalation",
+  "payload": "Stuck on JWT refresh token logic — need senior review",
+  "taskId": "task-042",
+  "timestamp": "2026-04-27T10:30:00Z",
+  "read": false
+}
+```
+
+### API
+
+```javascript
+import { publish, subscribe, subscribeAll, readLog, getUnread } from './core/message-bus.js';
+
+// Send a message
+await publish({ from: 'junior-dev', to: 'senior-dev', type: 'escalation', payload: '...', taskId: 'task-001' });
+
+// Receive messages for this agent (used in agent-repl.js)
+subscribe('senior-dev', (envelope) => { /* render it */ });
+
+// Receive ALL messages (used in bus-monitor.js)
+subscribeAll((envelope) => { /* render it */ });
+```
+
+### Validation rules
+- `from` and `to` must be valid agent IDs: `junior-dev`, `senior-dev`, `qa-engineer`, `devops-engineer`, `project-manager`
+- `type` must be one of: `task`, `review`, `escalation`, `bug-report`, `handoff`, `summary`
+- `payload` is required (non-empty string)
+- `taskId` is optional
+
+### Bus Monitor (scripts/bus-monitor.js)
+
+Run in a dedicated 7th terminal window. Shows all inter-agent traffic in real time:
+
+```
+  ────────────────────────────────────────────────────────────────────────
+  10:30:15   👨‍💻 Junior Developer       →  🧠 Senior Developer        🚨 ESCALATION
+             Stuck on JWT refresh token logic — the token keeps expiring after
+             60 seconds even when rememberMe is true. Need senior review.
+  ············································································
+```
+
+- Replays last 20 messages from `messages.log` on start
+- Subscribes to all live traffic via `subscribeAll()`
+- Polls `messages.log` every 500ms to catch messages from other processes
+- Periodic status bar shows all 5 terminal states + mode
+
+---
+
 ## BUILD PHASES — WORK IN THIS ORDER
 
 ### ✅ Phase 1: Foundation — COMPLETE
@@ -276,6 +346,16 @@ Files built:
 - Git integration: injects `git log --oneline -10`, `git status` into context on every call
 - `tests/test-agents.js` — 47 tests all passing
 - `tests/smoke-test-agents.js` — live Claude API test passing
+
+### ✅ Launcher Scripts + Observability — COMPLETE (bonus, built ahead of schedule)
+**Goal:** Full launch automation + real-time inter-agent observability.
+
+Files built:
+- `scripts/launch.sh` — opens 7 terminal windows (bridge + 5 agents + bus monitor) in iTerm2 or Terminal.app
+- `scripts/tmux-layout.sh` — tmux session with 7 windows (Ctrl+B 0-6 to switch)
+- `scripts/agent-repl.js` — interactive per-agent REPL; incoming messages display inline with banners; `/msg` and `/reply` commands
+- `core/message-bus.js` — full EventEmitter bus with publish/subscribe/subscribeAll/readLog/getUnread
+- `scripts/bus-monitor.js` — standalone live traffic monitor with history replay + 500ms file poll
 
 ### 🔜 Phase 3: Voice Layer (Week 5)
 **Goal:** Speak a prompt → faster-whisper transcribes → agent receives it.
@@ -310,13 +390,13 @@ Colour behaviour to wire up in Phase 4:
 - Colour updates happen via EventEmitter push — no polling
 
 ### 🔜 Phase 5: Agent Communication (Week 7)
-**Goal:** Agents message each other. PM orchestrates autonomously.
+**Goal:** PM orchestrates the full team autonomously.
 
-Files to create:
-- `core/message-bus.js` — EventEmitter bus, JSON envelope: `{ from, to, type, payload, taskId, timestamp }`
-- PM orchestrator loop in `agents/project-manager.js`
+**Message bus is already built** (`core/message-bus.js`). What remains:
+- PM orchestrator loop in `agents/project-manager.js` — receives high-level goal, creates task list, dispatches with `publish()`
+- Wire `task:dispatched`, `task:done`, `task:failed` bus events to `terminalStatus` in `state.json`
 - Max-step budget: 20 (configurable in `.terminalforge/config.json`)
-- Log all messages to `.terminalforge/messages.log`
+- Log all dispatch decisions to `messages.log`
 
 ### 🔜 Phase 6: Polish (Week 8)
 - Error handling + retry logic on API calls
@@ -410,6 +490,8 @@ Messages for you: [unread messages from messages.log addressed to this agent]
 
 - Phase 1: ✅ COMPLETE — Foundation built and tested
 - Phase 2: ✅ COMPLETE — Agent engine built and tested
+- Launcher Scripts: ✅ COMPLETE — 7-window launch (bridge + 5 agents + bus monitor)
+- Observability Layer: ✅ COMPLETE — message bus + bus monitor + inline REPL banners
 - Phase 3: 🔜 NEXT — Voice Layer
 - Active branch: push to current `p1vN` branch
 - Tests passing: 19 (Phase 1) + 47 (Phase 2) = 66 total
@@ -432,10 +514,10 @@ Ask the user to confirm before moving to the next phase.
 ## USEFUL COMMANDS
 
 ```bash
-# Launch full platform (opens 6 terminal windows automatically)
+# Launch full platform (opens 7 terminal windows automatically)
 npm run launch
 
-# Launch with tmux (6 windows in one terminal)
+# Launch with tmux (7 windows in one terminal, Ctrl+B 0-6 to switch)
 npm run launch:tmux
 
 # Open a single agent REPL manually
@@ -444,6 +526,9 @@ npm run agent 2   # Senior Developer
 npm run agent 3   # QA Engineer
 npm run agent 4   # DevOps Engineer
 npm run agent 5   # Project Manager
+
+# Open the bus monitor standalone
+npm run monitor
 
 # Start bridge server only
 npm start
@@ -470,5 +555,6 @@ npm run lint
 # Kill everything
 kill $(lsof -ti:3333)
 pkill -f "agent-repl.js"
+pkill -f "bus-monitor.js"
 tmux kill-session -t terminalforge
 ```

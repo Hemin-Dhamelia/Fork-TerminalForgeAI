@@ -1,8 +1,8 @@
-# TerminalForge — Project Plan v4.0
+# TerminalForge — Project Plan v4.1
 
 **Multi-Agent AI Development Platform**
-Voice + Text Input · Volume Button Switching · Agent-to-Agent Communication
-*Project Plan v4.0 · April 2026*
+Voice + Text Input · Volume Button Switching · Agent-to-Agent Communication · Real-Time Observability
+*Project Plan v4.1 · May 2026*
 
 **GitHub Repositories**
 - Fork (Working Copy): https://github.com/Hemin-Dhamelia/Fork-TerminalForgeAI.git
@@ -16,7 +16,7 @@ TerminalForge is a macOS terminal-based multi-agent AI development platform. Fiv
 
 You interact with the agents by typing commands as text or by speaking using real-time voice input transcribed by faster-whisper. You navigate between agent terminals using your iPhone's physical Volume buttons — Volume DOWN steps forward (Terminal 1→2→3→4→5), Volume UP steps backward (5→4→3→2→1), wrapping around at each end.
 
-The agents communicate through a shared in-process message bus. The Project Manager agent acts as orchestrator in Autonomous Mode, automatically dispatching tasks to the appropriate agents and routing work through a full development pipeline.
+The agents communicate through a shared in-process message bus. A dedicated Bus Monitor window shows all inter-agent traffic in real time. The Project Manager agent acts as orchestrator in Autonomous Mode, automatically dispatching tasks to the appropriate agents and routing work through a full development pipeline.
 
 ### 1A. GitHub Repository Structure
 
@@ -43,6 +43,7 @@ TerminalForge uses a forked repository workflow:
 - Full-stack AI dev team in a single macOS terminal session
 - Context continuity — each agent retains session memory and reads shared project context
 - Agent-to-agent communication — PM orchestrates the full team autonomously
+- Real-time observability — dedicated Bus Monitor window shows all inter-agent messages live
 - Universal project support — build any app type: web, API, CLI, mobile backend, scripts, infra
 - Zero-friction UX — no mouse needed; hardware button = agent switch; voice or typing = input
 
@@ -103,9 +104,10 @@ Speak your prompt into your Mac's microphone. The system detects voice with sile
 | iPhone Bridge | iOS Shortcuts → HTTP POST → localhost:3333 | Volume button events reach the Mac daemon |
 | macOS Listener | Node.js Express daemon | Receives button events; updates state.json |
 | Message Bus | Node.js EventEmitter (in-process) | Agent-to-agent routing; no external broker needed |
+| Bus Monitor | Node.js (scripts/bus-monitor.js) | Dedicated terminal window showing all inter-agent traffic live |
 | Shared Context | JSON + Markdown flat files in .terminalforge/ | Project state, tasks, handoffs readable by all agents |
 | Git Integration | simple-git (Node.js) | Injects diff, log, status into agent context on switch |
-| Runtime | Node.js 18+ and Python 3.11+ | Monorepo: /core /agents /voice /bridge /ui |
+| Runtime | Node.js 18+ and Python 3.11+ | Monorepo: /core /agents /voice /bridge /ui /scripts |
 
 ---
 
@@ -117,7 +119,8 @@ Speak your prompt into your Mac's microphone. The system detects voice with sile
 - **macOS Event Listener Daemon:** Node.js daemon receives events, updates active terminal index, writes state.json
 - **Agent REPL Engine:** five stateful Claude API sessions with distinct system prompts, tools, and rolling history
 - **Shared Context Store:** project.md, open_tasks.json, handoffs.md in .terminalforge/ injected into each agent call
-- **Message Bus:** in-process EventEmitter; JSON envelope `{ from, to, type, payload, taskId, timestamp }`
+- **Message Bus:** in-process EventEmitter; JSON envelope `{ id, from, to, type, payload, taskId, timestamp, read }`
+- **Bus Monitor:** 7th terminal window; subscribes to all traffic via subscribeAll(); replays history + polls log file
 - **Terminal UI:** Ink/Textual TUI — active agent badge, mode indicator (Manual/Auto), voice status, streaming output
 - **Voice Layer:** mic → silero-vad → faster-whisper → text → active agent; optional TTS response
 
@@ -129,7 +132,7 @@ Speak your prompt into your Mac's microphone. The system detects voice with sile
 /voice       — silero-vad integration, faster-whisper wrapper, TTS output handler
 /bridge      — iOS Shortcuts HTTP endpoint, volume event parser, hotkey fallback
 /ui          — Ink TUI components: agent panel, badge, streaming output, voice indicator
-/scripts     — launch.sh, tmux-layout.sh, agent-repl.js (launcher scripts)
+/scripts     — launch.sh, tmux-layout.sh, agent-repl.js, bus-monitor.js
 /docs        — project plan, Claude Code prompt, quickstart guide
 /.terminalforge — runtime: state.json, messages.log, project.md, open_tasks.json, handoffs.md
 ```
@@ -158,6 +161,47 @@ Speak your prompt into your Mac's microphone. The system detects voice with sile
 | QA Engineer | Junior Developer | Files bug report with repro steps, expected vs actual, severity |
 | QA Engineer | Senior Developer | Escalates architectural bugs requiring senior investigation |
 | DevOps Engineer | Senior Developer | Requests confirmation before infra changes affecting app config |
+
+### 7.3 Message Bus API (`core/message-bus.js`) — BUILT
+
+```javascript
+publish({ from, to, type, payload, taskId? })  // validate + emit + append to messages.log
+subscribe(agentId, callback)                    // targeted — each agent REPL receives its messages
+subscribeAll(callback)                          // all traffic — bus monitor uses this
+unsubscribe(agentId, callback)
+readLog()                                       // parse full messages.log → array of envelopes
+getUnread(agentId)                              // filter unread messages for a specific agent
+```
+
+**Message types:** `task` · `review` · `escalation` · `bug-report` · `handoff` · `summary`
+
+**Agent IDs:** `junior-dev` · `senior-dev` · `qa-engineer` · `devops-engineer` · `project-manager`
+
+### 7.4 Agent REPL Commands — BUILT
+
+Each agent terminal (scripts/agent-repl.js) supports these commands:
+
+```
+/msg <agentId> <type> <message>   — send a message to another agent
+/reply <message>                  — quick-reply to the last received message
+/clear                            — clear this agent's conversation history
+/status                           — show current terminal state from state.json
+/quit                             — close this agent REPL
+```
+
+When another agent sends a message, a colour-coded banner appears inline:
+
+```
+──────────────────────────────────────────────────────────────
+  📨 Incoming message  [10:30:15]
+  👨‍💻  Junior Developer → 🧠 Senior Developer
+  Type: 🚨 ESCALATION  taskId: task-001
+──────────────────────────────────────────────────────────────
+  Stuck on JWT refresh token logic — the token keeps expiring
+  after 60 seconds even when rememberMe is true.
+──────────────────────────────────────────────────────────────
+  Reply with /reply <message> or just type your next prompt.
+```
 
 ---
 
@@ -244,6 +288,44 @@ export function getTerminalColour(terminalIndex, terminalStatus) {
 
 ---
 
+## 7C. Bus Monitor — Real-Time Observability (`scripts/bus-monitor.js`) — BUILT
+
+The Bus Monitor is a dedicated terminal window that shows all inter-agent messages as they flow through the system. It is automatically opened as the 7th window by `npm run launch` and `npm run launch:tmux`.
+
+### What It Shows
+
+```
+╔════════════════════════════════════════════════════════════════════════╗
+║  📡  TerminalForge — Agent Message Bus Monitor                        ║
+╚════════════════════════════════════════════════════════════════════════╝
+
+  Agents:
+  👨‍💻 T1 Junior Developer              🧠 T2 Senior Developer
+  🔍 T3 QA Engineer                    ⚙️  T4 DevOps Engineer
+  📋 T5 Project Manager
+
+────────────────────────────────────────────────────────────────────────
+  TIME        FROM                  TO                  TYPE
+────────────────────────────────────────────────────────────────────────
+  10:30:15   👨‍💻 Junior Developer   →  🧠 Senior Developer    🚨 ESCALATION
+             Stuck on JWT refresh token logic — the token keeps expiring
+             after 60 seconds even when rememberMe is true.
+·············································································
+  10:31:02   🔍 QA Engineer         →  👨‍💻 Junior Developer   🐛 BUG-REPORT
+             Auth middleware returns 200 instead of 401 for invalid tokens.
+·············································································
+```
+
+### How It Works
+
+- Replays the last 20 messages from `.terminalforge/messages.log` on start
+- Subscribes to all live traffic via `subscribeAll()` for in-process messages
+- Polls `messages.log` every 500ms to catch messages published from other processes
+- Prints a periodic status line showing all 5 terminal states + current mode
+- Run standalone: `npm run monitor`
+
+---
+
 ## 8. Typical Development Workflow
 
 ### 8.1 Starting a New Project (Manual Mode)
@@ -254,27 +336,29 @@ export function getTerminalColour(terminalIndex, terminalStatus) {
 - Vol DOWN to Terminal 3 (QA) → generate test cases, run tests, file bugs back to Junior Dev
 - Vol DOWN to Terminal 4 (DevOps) → write Dockerfile, CI pipeline YAML, deployment script
 - Vol UP back to Terminal 5 (PM) → sprint review summary, mark tasks done, plan next iteration
+- Keep the Bus Monitor (Terminal 7 / tmux window 6) open to watch all inter-agent messages live
 
 ### 8.2 Autonomous Mode (Hands-Free)
 
 - Hold either volume button for 2s → Autonomous Mode activates (TUI badge changes to AUTO)
 - Speak or type a high-level goal: *'Build a CRUD REST API with user auth and PostgreSQL'*
 - PM Agent generates task list and begins dispatching automatically
-- Watch the pipeline execute in the TUI; all agent messages visible in the sidebar
+- Watch the pipeline execute in the TUI; all agent messages visible in the Bus Monitor
 - Interrupt at any time by holding either volume button → returns to Manual Mode immediately
 
 ---
 
 ## 9. Project Roadmap
 
-| Phase | Name | Timeline | Key Deliverables | Milestone |
-|---|---|---|---|---|
-| ✅ Phase 1 | Foundation | Weeks 1–2 | Bluetooth bridge, vol event listener, Claude API streaming test | Core infra |
-| ✅ Phase 2 | Agent Engine | Weeks 3–4 | 5 agent sessions w/ system prompts, shared context store, git integration | Agents live |
-| 🔜 Phase 3 | Voice Layer | Week 5 | Mic → faster-whisper → agent prompt; silero-vad; wake word; optional TTS | Voice works |
-| 🔜 Phase 4 | TUI + Colour | Week 6 | Ink TUI: agent badge, mode indicator, streaming output; terminal colour system; vol button wired end-to-end | Full UX ready |
-| 🔜 Phase 5 | Agent Comms | Week 7 | Message bus, PM orchestrator loop, auto-dispatch, agent handoff protocol; colour events wired | Agents talk |
-| 🔜 Phase 6 | Polish & Docs | Week 8 | Error handling, logging, onboarding guide, demo project (full web app built end-to-end) | Shippable v1 |
+| Phase | Name | Timeline | Key Deliverables | Milestone | Status |
+|---|---|---|---|---|---|
+| Phase 1 | Foundation | Weeks 1–2 | Bluetooth bridge, vol event listener, Claude API streaming test | Core infra | ✅ COMPLETE |
+| Phase 2 | Agent Engine | Weeks 3–4 | 5 agent sessions w/ system prompts, shared context store, git integration | Agents live | ✅ COMPLETE |
+| Bonus | Launcher + Observability | Week 4 | 7-window launch script, tmux layout, bus monitor, inline REPL banners, /msg /reply commands | Full visibility | ✅ COMPLETE |
+| Phase 3 | Voice Layer | Week 5 | Mic → faster-whisper → agent prompt; silero-vad; wake word; optional TTS | Voice works | 🔜 NEXT |
+| Phase 4 | TUI + Colour | Week 6 | Ink TUI: agent badge, mode indicator, streaming output; terminal colour system; vol button wired end-to-end | Full UX ready | 🔜 |
+| Phase 5 | Agent Comms | Week 7 | PM orchestrator loop, auto-dispatch, agent handoff protocol; colour events wired (message bus core ✅ done) | Agents talk | 🔜 |
+| Phase 6 | Polish & Docs | Week 8 | Error handling, logging, onboarding guide, demo project (full web app built end-to-end) | Shippable v1 | 🔜 |
 
 Total: 8 weeks from kickoff to shippable v1. Prototype (voice + switching, no agent comms): 2–3 weeks.
 
@@ -291,6 +375,7 @@ Total: 8 weeks from kickoff to shippable v1. Prototype (voice + switching, no ag
 | Voice false activation in noisy environment | Medium | Default Push-to-Talk; VAD sensitivity configurable in config.json | Low |
 | macOS API changes break volume hook | Low | Thin abstraction wrapper; document tested macOS versions (14.x, 15.x) | Very Low |
 | System prompt drift on long sessions | Medium | Pin system prompts per agent; add session-reset command ('reset agent') | Low |
+| Message bus lost on process restart | Low | messages.log is the persistent log; bus-monitor replays on start | Very Low |
 
 ---
 
@@ -304,22 +389,43 @@ Total: 8 weeks from kickoff to shippable v1. Prototype (voice + switching, no ag
 - **End-to-end build:** a full CRUD web app can be scaffolded, tested, and containerised using only TerminalForge
 - **Context retention:** agents correctly reference prior outputs and handoff notes 95%+ of the time
 - **Zero mouse required:** entire session operable with only voice/keyboard + volume buttons
+- **Observability:** all inter-agent messages visible in real time in Bus Monitor within < 1s of publish
 
 ---
 
-## 12. Immediate Next Steps
+## 12. Current Build Status & Next Steps
 
-- Set up Anthropic API key; test claude-sonnet-4-5 streaming in terminal with a basic system prompt
-- Clone fork: `git clone https://github.com/Hemin-Dhamelia/Fork-TerminalForgeAI.git`
-- Add upstream: `git remote add upstream https://github.com/TerminalForgeAI/TerminalForgeAI.git`
-- Build `core/state.js` + `bridge/server.js` (Express :3333 for vol button events)
-- Install faster-whisper + silero-vad; test mic input → transcription in under 2 seconds
-- Build iOS Shortcut that POSTs volume events to Mac localhost:3333; confirm receipt in Node daemon
-- Write 5 system prompts (one per agent); test each in isolation with representative sample tasks
-- Build minimal TUI showing active agent badge and streaming output panel
-- Wire voice input to active agent: speak a prompt → see live transcription → get streamed response
-- Implement message bus and PM orchestrator; test a 3-agent pipeline (PM → Junior → QA)
-- Integrate git context injection; test that Senior Dev can see current diff and commit history
+### What Is Built (as of May 2026)
 
-**Estimated time to working voice prototype (Phase 1–3):** 3 weeks
-**Estimated time to full autonomous multi-agent pipeline (all 6 phases):** 8 weeks
+| Component | File(s) | Status |
+|---|---|---|
+| State management | `core/state.js` | ✅ Done |
+| Bridge server | `bridge/server.js` | ✅ Done |
+| Event listener | `core/event-listener.js` | ✅ Done |
+| 5 agent configs | `agents/*.js` | ✅ Done |
+| Agent router | `core/agent-router.js` | ✅ Done |
+| Context manager | `core/context-manager.js` | ✅ Done |
+| Message bus | `core/message-bus.js` | ✅ Done |
+| Agent REPL | `scripts/agent-repl.js` | ✅ Done |
+| Bus monitor | `scripts/bus-monitor.js` | ✅ Done |
+| Launch scripts | `scripts/launch.sh`, `tmux-layout.sh` | ✅ Done |
+| Phase 1 tests | `tests/test-switch.js` | ✅ 19 passing |
+| Phase 2 tests | `tests/test-agents.js` | ✅ 47 passing |
+| Voice pipeline | `voice/*.py` | 🔜 Phase 3 |
+| Hotkey fallback | `bridge/hotkey-fallback.js` | 🔜 Phase 3 |
+| TUI components | `ui/*.js` | 🔜 Phase 4 |
+| PM orchestrator | `agents/project-manager.js` (loop) | 🔜 Phase 5 |
+
+### Immediate Next Steps (Phase 3: Voice Layer)
+
+1. Install Python dependencies: `pip install faster-whisper silero-vad openwakeword loguru sounddevice`
+2. Build `voice/vad.py` — mic capture + silero-vad speech detection, Python asyncio
+3. Build `voice/transcriber.py` — faster-whisper wrapper, target < 2s latency, local model
+4. Build `bridge/hotkey-fallback.js` — Node.js F5 push-to-talk trigger, posts to bridge server
+5. Build `voice/wake-word.py` — openWakeWord "Hey Forge" trigger for hands-free mode
+6. Build `voice/tts.py` — optional TTS response via ElevenLabs API or macOS `say`
+7. Test: hold F5, speak, release → transcribed text sent to active agent
+8. Verify: transcription latency < 2s end-to-end, fully offline
+
+**Estimated time to working voice prototype (Phase 1–3):** 3 weeks from kickoff
+**Estimated time to full autonomous multi-agent pipeline (all 6 phases):** 8 weeks from kickoff
