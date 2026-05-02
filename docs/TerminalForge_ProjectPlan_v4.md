@@ -393,9 +393,26 @@ Total: 8 weeks from kickoff to shippable v1. Prototype (voice + switching, no ag
 
 ---
 
-## 12. Current Build Status & Next Steps
+## 12. Immediate Next Steps
 
-### What Is Built (as of May 2026)
+- Set up Anthropic API key; test claude-sonnet-4-5 streaming in terminal with a basic system prompt
+- Clone fork: `git clone https://github.com/Hemin-Dhamelia/Fork-TerminalForgeAI.git`
+- Add upstream: `git remote add upstream https://github.com/TerminalForgeAI/TerminalForgeAI.git`
+- Build `core/state.js` + `bridge/server.js` (Express :3333 for vol button events)
+- Install faster-whisper + silero-vad; test mic input → transcription in under 2 seconds
+- Build iOS Shortcut that POSTs volume events to Mac localhost:3333; confirm receipt in Node daemon
+- Write 5 system prompts (one per agent); test each in isolation with representative sample tasks
+- Build minimal TUI showing active agent badge and streaming output panel
+- Wire voice input to active agent: speak a prompt → see live transcription → get streamed response
+- Implement message bus and PM orchestrator; test a 3-agent pipeline (PM → Junior → QA)
+- Integrate git context injection; test that Senior Dev can see current diff and commit history
+
+**Estimated time to working voice prototype (Phase 1–3):** 3 weeks
+**Estimated time to full autonomous multi-agent pipeline (all 6 phases):** 8 weeks
+
+---
+
+## 12A. Current Build Status (as of May 2026)
 
 | Component | File(s) | Status |
 |---|---|---|
@@ -408,7 +425,7 @@ Total: 8 weeks from kickoff to shippable v1. Prototype (voice + switching, no ag
 | Message bus | `core/message-bus.js` | ✅ Done |
 | Agent REPL | `scripts/agent-repl.js` | ✅ Done |
 | Bus monitor | `scripts/bus-monitor.js` | ✅ Done |
-| Launch scripts | `scripts/launch.sh`, `tmux-layout.sh` | ✅ Done |
+| Launch scripts | `scripts/launch.sh`, `tmux-layout.sh` | ✅ Done (7 windows) |
 | Phase 1 tests | `tests/test-switch.js` | ✅ 19 passing |
 | Phase 2 tests | `tests/test-agents.js` | ✅ 47 passing |
 | Voice pipeline | `voice/*.py` | 🔜 Phase 3 |
@@ -416,7 +433,7 @@ Total: 8 weeks from kickoff to shippable v1. Prototype (voice + switching, no ag
 | TUI components | `ui/*.js` | 🔜 Phase 4 |
 | PM orchestrator | `agents/project-manager.js` (loop) | 🔜 Phase 5 |
 
-### Immediate Next Steps (Phase 3: Voice Layer)
+### Next Steps for Phase 3: Voice Layer
 
 1. Install Python dependencies: `pip install faster-whisper silero-vad openwakeword loguru sounddevice`
 2. Build `voice/vad.py` — mic capture + silero-vad speech detection, Python asyncio
@@ -426,6 +443,3 @@ Total: 8 weeks from kickoff to shippable v1. Prototype (voice + switching, no ag
 6. Build `voice/tts.py` — optional TTS response via ElevenLabs API or macOS `say`
 7. Test: hold F5, speak, release → transcribed text sent to active agent
 8. Verify: transcription latency < 2s end-to-end, fully offline
-
-**Estimated time to working voice prototype (Phase 1–3):** 3 weeks from kickoff
-**Estimated time to full autonomous multi-agent pipeline (all 6 phases):** 8 weeks from kickoff
