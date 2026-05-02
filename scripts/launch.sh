@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # TerminalForge — Launch Script
-# Opens 6 terminal windows: 1 bridge server + 5 agent REPLs
+# Opens 7 terminal windows: 1 bridge server + 5 agent REPLs + 1 bus monitor
 # Supports: iTerm2 (preferred) → Terminal.app (fallback)
 
 set -e
@@ -8,6 +8,7 @@ set -e
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REPL="$DIR/scripts/agent-repl.js"
 BRIDGE="$DIR/bridge/server.js"
+MONITOR="$DIR/scripts/bus-monitor.js"
 
 AGENT_NAMES=(
   ""
@@ -94,13 +95,22 @@ tell application "iTerm2"
       end tell
     end repeat
 
+    -- Tab 7: Bus Monitor
+    set monitorTab to (create tab with default profile)
+    tell monitorTab
+      tell current session
+        set name to "📡 Bus Monitor"
+        write text "cd '$DIR' && node scripts/bus-monitor.js"
+      end tell
+    end tell
+
     -- Focus the first agent tab (tab 2)
     tell tab 2 to select
   end tell
 end tell
 APPLESCRIPT
 
-  echo "✅  iTerm2 launched with 6 tabs."
+  echo "✅  iTerm2 launched with 7 tabs (6 windows + bus monitor)."
 }
 
 # ── Terminal.app launcher ────────────────────────────────────────────────────
@@ -133,7 +143,15 @@ APPLESCRIPT
     sleep 0.3
   done
 
-  echo "✅  Terminal.app opened 6 windows (1 bridge + 5 agents)."
+  # Bus Monitor window
+  osascript <<APPLESCRIPT
+tell application "Terminal"
+  do script "cd '$DIR' && node scripts/bus-monitor.js"
+  set the custom title of front window to "📡 Bus Monitor"
+end tell
+APPLESCRIPT
+
+  echo "✅  Terminal.app opened 7 windows (1 bridge + 5 agents + 1 bus monitor)."
 }
 
 # ── Detect and launch ────────────────────────────────────────────────────────
@@ -153,6 +171,7 @@ echo "│   🧠  T2 · Senior Developer                 │"
 echo "│   🔍  T3 · QA Engineer                      │"
 echo "│   ⚙️   T4 · DevOps Engineer                  │"
 echo "│   📋  T5 · Project Manager                  │"
+echo "│   📡  Bus Monitor  (all inter-agent msgs)   │"
 echo "└─────────────────────────────────────────────┘"
 echo ""
 echo "  Simulate Vol DOWN:  curl -X POST http://localhost:3333/volume -H 'Content-Type: application/json' -d '{\"button\":\"down\"}'"

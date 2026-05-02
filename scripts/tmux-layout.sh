@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # TerminalForge — tmux layout
-# Creates a tmux session with 6 windows: bridge + 5 agent REPLs
+# Creates a tmux session with 7 windows: bridge + 5 agent REPLs + bus monitor
 # Usage: bash scripts/tmux-layout.sh
 
 set -e
@@ -34,6 +34,10 @@ for i in 1 2 3 4 5; do
   tmux send-keys -t "$SESSION:$i" "cd '$DIR' && node scripts/agent-repl.js $i" Enter
 done
 
+# Window 6: Bus Monitor
+tmux new-window -t "$SESSION" -n "📡 BusMonitor"
+tmux send-keys -t "$SESSION:6" "cd '$DIR' && node scripts/bus-monitor.js" Enter
+
 # Focus window 1 (Junior Dev) on attach
 tmux select-window -t "$SESSION:1"
 
@@ -47,9 +51,10 @@ echo "║  Window 2 — 🧠 T2 Senior Developer               ║"
 echo "║  Window 3 — 🔍 T3 QA Engineer                    ║"
 echo "║  Window 4 — ⚙️  T4 DevOps Engineer                ║"
 echo "║  Window 5 — 📋 T5 Project Manager                ║"
+echo "║  Window 6 — 📡 Bus Monitor (live agent msgs)    ║"
 echo "╠══════════════════════════════════════════════════╣"
 echo "║  Attach:  tmux attach -t terminalforge           ║"
-echo "║  Switch:  Ctrl+B then 0-5                        ║"
+echo "║  Switch:  Ctrl+B then 0-6                        ║"
 echo "║  Kill:    tmux kill-session -t terminalforge     ║"
 echo "╚══════════════════════════════════════════════════╝"
 echo ""
