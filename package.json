@@ -11,6 +11,7 @@
     "launch": "bash scripts/launch.sh",
     "launch:tmux": "bash scripts/tmux-layout.sh",
     "agent": "node scripts/agent-repl.js",
+    "monitor": "node scripts/bus-monitor.js",
     "test": "node --experimental-vm-modules node_modules/.bin/jest",
     "test:switch": "node tests/test-switch.js",
     "test:agents": "node tests/test-agents.js",
