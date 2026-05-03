@@ -15,7 +15,7 @@ config({ path: resolve(dirname(fileURLToPath(import.meta.url)), '..', '.env'), o
 
 import { routePrompt, clearHistory } from '../core/agent-router.js';
 import { readState, setTerminalStatus } from '../core/state.js';
-import { subscribe, publish, AGENT_NAMES, getAgentIdByTerminal } from '../core/message-bus.js';
+import { subscribe, publish, AGENT_NAMES } from '../core/message-bus.js';
 import { getAgentIdByTerminal as getAgentId } from '../core/context-manager.js';
 
 const TERMINAL_INDEX = parseInt(process.argv[2]);
