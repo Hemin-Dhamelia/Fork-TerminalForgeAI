@@ -27,6 +27,12 @@ import time
 from pathlib import Path
 from datetime import datetime, timezone
 
+# Ensure the project root is on sys.path so `from voice.X import Y` always works,
+# regardless of whether this file is run as a script or with python3 -m voice.pipeline
+_ROOT = Path(__file__).resolve().parent.parent
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+
 import requests  # type: ignore
 from loguru import logger
 
@@ -117,48 +123,57 @@ def _post_transcription(text: str, confidence: float = 1.0) -> bool:
 
 def run_push_to_talk(transcriber, config: dict) -> None:
     """
-    Push-to-talk loop: waits for voice_state.json status="recording",
-    captures audio, transcribes, sends to bridge.
-
-    Controlled externally by bridge/hotkey-fallback.js which writes voice_state.json.
+    Push-to-talk loop using PersistentMic — mic stays open, recording starts instantly.
+    Space key in the TUI (or hotkey-fallback.js) writes voice_state.json status="recording".
     """
-    from voice.vad import record_push_to_talk  # type: ignore
+    from voice.vad import PersistentMic, record_push_to_talk_fast  # type: ignore
 
-    logger.info("Push-to-talk mode ready. Use bridge/hotkey-fallback.js to toggle recording.")
+    # Open mic stream ONCE — eliminates the 2.3s open overhead on every press
+    mic = PersistentMic()
+    mic.open()
+
+    logger.info("Push-to-talk mode ready — press Space in the TUI to record.")
     logger.info("Press Ctrl+C to stop the pipeline.")
     print("\n  TerminalForge Voice Pipeline (push-to-talk)")
-    print("  Run 'npm run voice:hotkey' in another terminal to control recording")
+    print("  Press Space in the TUI to start/stop recording")
     print("  Press Ctrl+C to stop\n")
 
     _write_voice_state("idle", "push-to-talk")
     tts_enabled = config.get("ttsEnabled", False)
 
-    while True:
-        state = _read_voice_state()
-        if state.get("status") == "recording":
-            print("  🎤 Recording...")
-            _write_voice_state("recording", "push-to-talk", recording=True)
+    try:
+        while True:
+            state = _read_voice_state()
+            if state.get("status") == "recording":
+                print("  🎤 Recording...", flush=True)
 
-            audio = record_push_to_talk(VOICE_STATE)
+                # record_push_to_talk_fast uses the already-open stream — no delay
+                audio = record_push_to_talk_fast(mic, VOICE_STATE)
 
-            if audio is not None:
-                print("  ⌨  Transcribing...")
-                _write_voice_state("transcribing", "push-to-talk")
-                text = transcriber.transcribe(audio)
+                if audio is not None:
+                    print("  ⌨  Transcribing...", flush=True)
+                    _write_voice_state("transcribing", "push-to-talk")
+                    t0    = time.monotonic()
+                    text  = transcriber.transcribe(audio)
+                    t_ms  = (time.monotonic() - t0) * 1000
 
-                if text:
-                    print(f"  ✓ Transcribed: {text!r}")
-                    _post_transcription(text)
-                    if tts_enabled:
-                        from voice.tts import speak  # type: ignore
-                        speak(text, provider=config.get("ttsProvider", "say"))
+                    if text:
+                        print(f"  ✓ [{t_ms:.0f}ms] {text!r}", flush=True)
+                        _post_transcription(text)
+                        if tts_enabled:
+                            from voice.tts import speak  # type: ignore
+                            speak(text, provider=config.get("ttsProvider", "say"))
+                    else:
+                        print("  - Nothing detected", flush=True)
                 else:
-                    print("  - Nothing detected")
+                    print("  - Too short / no audio", flush=True)
 
-            _write_voice_state("idle", "push-to-talk")
-            print("  Ready — toggle recording to speak again\n")
+                _write_voice_state("idle", "push-to-talk")
+                print("  Ready — press Space to record again\n", flush=True)
 
-        time.sleep(0.05)
+            time.sleep(0.02)  # 20ms poll — was 50ms
+    finally:
+        mic.close()
 
 
 # -- Auto-VAD mode ---------------------------------------------------------------
@@ -316,6 +331,14 @@ Examples:
     from voice.transcriber import Transcriber  # type: ignore
     transcriber = Transcriber(model_size=model)
     transcriber.load()
+
+    # Pre-warm: run one silent inference so the first real transcription is fast
+    # (CTranslate2 JIT-compiles kernels on first call — ~600ms overhead without warmup)
+    logger.info("Pre-warming transcriber...")
+    import numpy as _np
+    transcriber.transcribe(_np.zeros(16000, dtype=_np.float32))
+    del _np
+    logger.success("Transcriber warmed up — first transcription will be fast")
 
     # Run selected mode
     try:

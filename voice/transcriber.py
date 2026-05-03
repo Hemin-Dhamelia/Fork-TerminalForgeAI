@@ -10,8 +10,14 @@ Usage:
     text = t.transcribe(audio_array, sample_rate=16000)
 """
 
-import numpy as np
+import sys
 from pathlib import Path
+
+_ROOT = Path(__file__).resolve().parent.parent
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+
+import numpy as np
 from typing import Optional
 from loguru import logger
 
