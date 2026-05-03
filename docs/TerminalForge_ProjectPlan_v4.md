@@ -356,7 +356,7 @@ The Bus Monitor is a dedicated terminal window that shows all inter-agent messag
 | Phase 2 | Agent Engine | Weeks 3–4 | 5 agent sessions w/ system prompts, shared context store, git integration | Agents live | ✅ COMPLETE |
 | Bonus | Launcher + Observability | Week 4 | 7-window launch script, tmux layout, bus monitor, inline REPL banners, /msg /reply commands | Full visibility | ✅ COMPLETE |
 | Phase 3 | Voice Layer | Week 5 | Mic → faster-whisper → agent prompt; silero-vad; wake word; optional TTS | Voice works | 🔜 NEXT |
-| Phase 4 | TUI + Colour | Week 6 | Ink TUI: agent badge, mode indicator, streaming output; terminal colour system; vol button wired end-to-end | Full UX ready | 🔜 |
+| Phase 4 | TUI + Colour | Week 6 | Ink TUI: agent badge, mode indicator, streaming output; terminal colour system; vol button wired end-to-end | Full UX ready | ✅ COMPLETE |
 | Phase 5 | Agent Comms | Week 7 | PM orchestrator loop, auto-dispatch, agent handoff protocol; colour events wired (message bus core ✅ done) | Agents talk | 🔜 |
 | Phase 6 | Polish & Docs | Week 8 | Error handling, logging, onboarding guide, demo project (full web app built end-to-end) | Shippable v1 | 🔜 |
 
@@ -430,7 +430,7 @@ Total: 8 weeks from kickoff to shippable v1. Prototype (voice + switching, no ag
 | Phase 2 tests | `tests/test-agents.js` | ✅ 47 passing |
 | Voice pipeline | `voice/*.py` | 🔜 Phase 3 |
 | Hotkey fallback | `bridge/hotkey-fallback.js` | 🔜 Phase 3 |
-| TUI components | `ui/*.js` | 🔜 Phase 4 |
+| TUI components | `ui/App.jsx`, `ui/AgentPane.jsx`, `ui/StatusBar.jsx`, `ui/BusMonitorPanel.jsx`, `ui/TerminalColorManager.jsx` | ✅ Done — Phase 4 |
 | PM orchestrator | `agents/project-manager.js` (loop) | 🔜 Phase 5 |
 
 ### Next Steps for Phase 3: Voice Layer
@@ -481,3 +481,51 @@ junior-dev      → senior-dev   [escalation] "I have implemented GET /ping retu
 ```
 
 **Zero regressions. All components — bridge, state, navigation, all 5 Claude agents, message bus, context injection, and bus monitor — verified working end to end.**
+
+---
+
+## 12C. Phase 4 TUI Build — Complete (May 2026)
+
+Full-screen Ink TUI built and verified. Launch with `npm run ui`.
+
+### Layout
+
+```
++-----+------------------------+-------+-------+-------+----------+
+| T1  |    T2 (ACTIVE)         |  T3   |  T4   |  T5   | Bus Mon  |
+| 👨‍💻  | streaming output...    |  🔍   |  ⚙️    |  📋   | 📡 live  |
+|     | [T2] > your prompt     |       |       |       | feed     |
++-----+------------------------+-------+-------+-------+----------+
+```
+
+Width allocation (terminal >= 160 cols): active pane 36%, each of 4 inactive panes 16%, bus monitor 12%. On narrower terminals all panes share equal width.
+
+### Files Built
+
+| File | What It Does |
+|---|---|
+| `ui/App.jsx` | Root component — manages all state (conversations per agent, activeTerminal, mode, terminalStatus, inputValue, isProcessing, busMessages). Handles /clear, /status, /msg, /reply, and normal prompts via routePrompt() with streaming onToken callback. Tab/Shift+Tab navigation writes state.json directly. Polls state.json every 1s for bridge server vol-button changes. |
+| `ui/AgentPane.jsx` | Per-agent pane — active: double border, 36% width, TextInput at bottom, full conversation scroll; inactive: single border, compact, last 8 lines displayed. ConvLine renders user (cyan), assistant (white), notification (yellow banner), system (green checkmark / red x). |
+| `ui/StatusBar.jsx` | Top bar (1 line) — TerminalForge brand, MANUAL/AUTO mode badge, active agent name + emoji, 5 mini status dots (o/*/v/x per state), message count, Tab/Enter/Ctrl+C hints. |
+| `ui/BusMonitorPanel.jsx` | Right panel — scrollable live feed of all inter-agent bus messages. Shows timestamp, from→to emojis, type label, payload preview (word-wrapped to panel width). |
+| `ui/TerminalColorManager.jsx` | AGENT_INFO map (name, emoji, colour per terminal 1–5), STATUS_STYLES map (bgColor, color, label, dot per idle/working/done/failed state), getStatusStyle() and getAgentInfo() helpers. |
+| `scripts/ui.js` | Entry point — dotenv load, API key validation, cursor hide, render(<App>), cursor restore + screen clear on SIGINT/SIGTERM/exit. |
+| `tsconfig.json` | Added for tsx JSX transform: `"jsx": "react-jsx"`, `"jsxImportSource": "react"`, `"module": "ESNext"`, `"allowJs": true`. |
+
+### Dependencies Added
+
+| Package | Version | Purpose |
+|---|---|---|
+| `ink` | ^4.4.1 | React-for-terminal — Box, Text, useInput, useStdout, useStdin |
+| `react` | ^18.3.1 | JSX runtime for Ink |
+| `ink-text-input` | ^5.0.1 | TextInput component for active pane prompt box |
+| `tsx` | ^4.21.0 | Zero-config JSX + ESM runner (`npx tsx scripts/ui.js`) |
+
+### Key Technical Notes
+
+- All `.jsx` files (not `.js`) — tsx pre-pass lexer handles JSX correctly with `.jsx` extension + tsconfig.json
+- All Unicode box-drawing and decorative characters replaced with ASCII — tsx lexer compatibility
+- `useInput` guarded with `{ isActive: Boolean(isRawModeSupported) }` — prevents crash when stdin is not a TTY
+- Streaming pattern: adds `{role:'assistant', text:'', streaming:true}` placeholder, updates via setState callback in onToken, marks streaming:false on complete
+- `goToTerminal` writes state.json directly (not via direction-based switchTerminal) since target index is known
+- State polling every 1s picks up bridge server vol-button changes while TUI is running

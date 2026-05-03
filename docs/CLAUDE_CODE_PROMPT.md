@@ -117,8 +117,25 @@ Full live test suite verified against the real stack (bridge server + all 5 agen
 
 **E2E pipeline summary:** PM (T5) called Claude to create a task → published to `junior-dev` via message bus with `taskId: task-e2e-001` → Junior Dev's `buildAgentContext()` injected the unread task → Junior Dev (T1) called Claude, wrote implementation + unit test, escalated → escalation published to `senior-dev` with same taskId → Senior Dev (T2) called Claude, reviewed and approved. Full trace confirmed in `messages.log`. Zero regressions.
 
+### ✅ Phase 4: TUI (Ink) — COMPLETE (May 2026)
+
+Full-screen Ink TUI built and verified. All 5 agents run side-by-side in one terminal window with streaming output, per-agent input, live bus monitor panel, and real-time status bar.
+
+| File | Status |
+|---|---|
+| `ui/App.jsx` | ✅ Root component — full layout, state, streaming, Tab/Shift+Tab navigation, /clear /status /msg /reply |
+| `ui/AgentPane.jsx` | ✅ Per-agent pane — active (double border, TextInput, full conversation) / inactive (single border, last 8 lines) |
+| `ui/StatusBar.jsx` | ✅ Top bar — brand, MANUAL/AUTO mode badge, active agent, 5 status dots, message count, key hints |
+| `ui/BusMonitorPanel.jsx` | ✅ Right-column live bus feed — timestamp, from→to emojis, type icon, payload preview |
+| `ui/TerminalColorManager.jsx` | ✅ Agent info + status → colour/label/dot mappings used across all panes |
+| `scripts/ui.js` | ✅ Entry point — loads .env, validates API key, hides cursor, renders App, restores cursor on exit |
+| `tsconfig.json` | ✅ Added — `"jsx": "react-jsx"` for tsx JSX transform |
+| `package.json` | ✅ Updated — added `npm run ui`, `npm run ui:debug`, ink, react, ink-text-input, tsx |
+
+Launch: `npm run ui` — renders all 5 agents + bus monitor in one fullscreen window.
+Keyboard: Tab (next agent), Shift+Tab (prev agent), Enter (submit), Ctrl+C (quit).
+
 ### 🔜 Phase 3: Voice Layer — NEXT
-### 🔜 Phase 4: TUI (Ink)
 ### 🔜 Phase 5: Agent Communication (message bus ✅ done — PM orchestrator loop remaining)
 ### 🔜 Phase 6: Polish
 
@@ -168,12 +185,11 @@ terminalforge/
 │   ├── test-agents.js           ✅ BUILT (47 tests)
 │   └── smoke-test-agents.js     ✅ BUILT
 └── ui/
-    ├── App.js                   ← Phase 4
-    ├── AgentBadge.js            ← Phase 4
-    ├── ModeIndicator.js         ← Phase 4
-    ├── StreamPanel.js           ← Phase 4
-    ├── VoiceIndicator.js        ← Phase 4
-    └── TerminalColorManager.js  ← Phase 4
+    ├── App.jsx                      ✅ BUILT — root Ink component, state management, streaming
+    ├── AgentPane.jsx                ✅ BUILT — active/inactive pane, TextInput, conversation render
+    ├── StatusBar.jsx                ✅ BUILT — top bar with mode, agent, status dots, hints
+    ├── BusMonitorPanel.jsx          ✅ BUILT — right-column live inter-agent message feed
+    └── TerminalColorManager.jsx     ✅ BUILT — agent info + status colour/label/dot mappings
 ```
 
 ---
@@ -390,21 +406,20 @@ Success criteria:
 - Transcription latency < 2s end-to-end
 - Works fully offline (local faster-whisper model)
 
-### 🔜 Phase 4: TUI + Switching (Week 6)
+### ✅ Phase 4: TUI + Switching (Week 6) — COMPLETE (May 2026)
 **Goal:** Full terminal UI using Ink (React for terminal), including the live terminal colour system.
 
-Files to create:
-- `ui/App.js` — root component
-- `ui/AgentBadge.js` — shows "Terminal 2 · Senior Developer"
-- `ui/ModeIndicator.js` — MANUAL / AUTO
-- `ui/StreamPanel.js` — streaming Claude output
-- `ui/VoiceIndicator.js` — 🎤 Listening… / Transcribing…
-- `ui/TerminalColorManager.js` — reads `terminalStatus` from state.json, returns Ink colour class per terminal
+Files built:
+- `ui/App.jsx` — root component: full layout (StatusBar + 5 AgentPanes + BusMonitorPanel), state management, streaming via onToken callback, Tab/Shift+Tab navigation, /clear /status /msg /reply commands
+- `ui/AgentPane.jsx` — active pane: double border, wider (36%), TextInput, full conversation; inactive pane: single border, compact (equal split), last 8 lines
+- `ui/StatusBar.jsx` — top bar: brand, MANUAL/AUTO badge, active agent name+emoji, 5 mini status dots, message count, key hints
+- `ui/BusMonitorPanel.jsx` — right-column (12% width): live feed of all bus messages — timestamp, from→to, type icon, payload preview
+- `ui/TerminalColorManager.jsx` — AGENT_INFO map (emoji, name, colour per agent), STATUS_STYLES map (bgColor, label, dot per status state)
+- `scripts/ui.js` — entry point: loads .env, validates API key, hides cursor, renders `<App />`, restores cursor on SIGINT/exit
+- `tsconfig.json` — added: `"jsx": "react-jsx"`, `"jsxImportSource": "react"` for tsx JSX transform
 
-Colour behaviour to wire up in Phase 4:
-- Wrap each terminal panel in the colour returned by `getTerminalColour()`
-- Sidebar shows all 5 terminals with their current colour state at all times
-- Colour updates happen via EventEmitter push — no polling
+Width logic: terminal >= 160 cols → active pane 36%, each inactive 16%, bus 12%. Narrower → equal panes.
+Colour behaviour wired: task status (idle/working/done/failed) reflected in pane border colours and status dots.
 
 ### 🔜 Phase 5: Agent Communication (Week 7)
 **Goal:** PM orchestrates the full team autonomously.
@@ -510,6 +525,7 @@ Messages for you: [unread messages from messages.log addressed to this agent]
 - Launcher Scripts: ✅ COMPLETE — 7-window launch (bridge + 5 agents + bus monitor)
 - Observability Layer: ✅ COMPLETE — message bus + bus monitor + inline REPL banners
 - End-to-End Testing: ✅ COMPLETE — all 8 test areas pass, full PM→JuniorDev→SeniorDev pipeline verified live
+- Phase 4: ✅ COMPLETE — Full Ink TUI: 5 agents side-by-side, streaming, Tab navigation, bus monitor panel (`npm run ui`)
 - Phase 3: 🔜 NEXT — Voice Layer
 - Active branch: push to current `p1vN` branch
 - Tests passing: 19 (Phase 1) + 47 (Phase 2) + 25 (E2E pipeline) = 91 total verified checks
@@ -532,6 +548,10 @@ Ask the user to confirm before moving to the next phase.
 ## USEFUL COMMANDS
 
 ```bash
+# Launch full-screen TUI — all 5 agents + bus monitor in one window (RECOMMENDED)
+npm run ui
+npm run ui:debug    # same with DEBUG=tf:* logging enabled
+
 # Launch full platform (opens 7 terminal windows automatically)
 npm run launch
 
