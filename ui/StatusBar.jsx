@@ -7,16 +7,26 @@ import React from 'react';
 import { Box, Text } from 'ink';
 import { AGENT_INFO, getStatusStyle } from './TerminalColorManager.jsx';
 
+// Voice status → display config
+const VOICE_DISPLAY = {
+  idle:         null,                                        // hidden when idle
+  listening:    { icon: '👂', label: 'Listening',    color: 'cyan'    },
+  recording:    { icon: '🎤', label: 'Recording',    color: 'red'     },
+  transcribing: { icon: '⌨ ', label: 'Transcribing', color: 'magenta' },
+};
+
 export default function StatusBar({
   activeTerminal,
   mode,
   terminalStatus,
   isProcessing,
   busMessageCount,
+  voiceStatus,
   width,
 }) {
   const agent   = AGENT_INFO[activeTerminal] || {};
   const modeCol = mode === 'auto' ? 'yellow' : 'gray';
+  const voice   = VOICE_DISPLAY[voiceStatus] || null;
 
   return (
     <Box width={width} paddingX={1} backgroundColor="black" flexShrink={0}>
@@ -39,6 +49,14 @@ export default function StatusBar({
         <>
           <Text color="gray">  .  </Text>
           <Text color="yellow">* processing...</Text>
+        </>
+      )}
+
+      {/* Voice status indicator — only shown when pipeline is active */}
+      {voice && (
+        <>
+          <Text color="gray">  .  </Text>
+          <Text color={voice.color} bold>{voice.icon} {voice.label}</Text>
         </>
       )}
 

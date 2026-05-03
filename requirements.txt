@@ -1,0 +1,23 @@
+# TerminalForge — Python Voice Pipeline Dependencies
+# Install: pip install -r requirements.txt
+#
+# Python 3.11+ required
+# Tested on macOS 14+ (Sonoma)
+
+# --- Core voice pipeline ---
+faster-whisper>=1.0.0          # Local STT — CTranslate2 Whisper, no network needed
+silero-vad>=5.1.2              # Voice activity detection — detects speech start/end
+sounddevice>=0.5.1             # Cross-platform mic capture (PortAudio backend)
+numpy>=1.24.0                  # Audio buffer handling
+
+# --- Wake word ---
+openwakeword>=0.6.0            # "Hey Forge" wake word detection (optional — Phase 3)
+
+# --- TTS ---
+# macOS `say` is used by default — no pip package needed
+# Uncomment below for ElevenLabs TTS (optional):
+# elevenlabs>=1.0.0
+
+# --- Utilities ---
+loguru>=0.7.2                  # Logging (project standard for Python)
+requests>=2.32.0               # HTTP POST to bridge server (localhost:3333)

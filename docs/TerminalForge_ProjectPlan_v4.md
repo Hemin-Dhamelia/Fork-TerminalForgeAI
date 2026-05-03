@@ -355,7 +355,7 @@ The Bus Monitor is a dedicated terminal window that shows all inter-agent messag
 | Phase 1 | Foundation | Weeks 1–2 | Bluetooth bridge, vol event listener, Claude API streaming test | Core infra | ✅ COMPLETE |
 | Phase 2 | Agent Engine | Weeks 3–4 | 5 agent sessions w/ system prompts, shared context store, git integration | Agents live | ✅ COMPLETE |
 | Bonus | Launcher + Observability | Week 4 | 7-window launch script, tmux layout, bus monitor, inline REPL banners, /msg /reply commands | Full visibility | ✅ COMPLETE |
-| Phase 3 | Voice Layer | Week 5 | Mic → faster-whisper → agent prompt; silero-vad; wake word; optional TTS | Voice works | 🔜 NEXT |
+| Phase 3 | Voice Layer | Week 5 | Mic → faster-whisper → agent prompt; silero-vad; wake word; optional TTS | Voice works | ✅ COMPLETE |
 | Phase 4 | TUI + Colour | Week 6 | Ink TUI: agent badge, mode indicator, streaming output; terminal colour system; vol button wired end-to-end | Full UX ready | ✅ COMPLETE |
 | Phase 5 | Agent Comms | Week 7 | PM orchestrator loop, auto-dispatch, agent handoff protocol; colour events wired (message bus core ✅ done) | Agents talk | 🔜 |
 | Phase 6 | Polish & Docs | Week 8 | Error handling, logging, onboarding guide, demo project (full web app built end-to-end) | Shippable v1 | 🔜 |
@@ -428,21 +428,35 @@ Total: 8 weeks from kickoff to shippable v1. Prototype (voice + switching, no ag
 | Launch scripts | `scripts/launch.sh`, `tmux-layout.sh` | ✅ Done (7 windows) |
 | Phase 1 tests | `tests/test-switch.js` | ✅ 19 passing |
 | Phase 2 tests | `tests/test-agents.js` | ✅ 47 passing |
-| Voice pipeline | `voice/*.py` | 🔜 Phase 3 |
-| Hotkey fallback | `bridge/hotkey-fallback.js` | 🔜 Phase 3 |
+| Voice pipeline | `voice/pipeline.py`, `voice/transcriber.py`, `voice/vad.py`, `voice/wake-word.py`, `voice/tts.py` | ✅ Done — Phase 3 |
+| Hotkey fallback | `bridge/hotkey-fallback.js` | ✅ Done — Phase 3 |
+| Voice bridge endpoints | `bridge/server.js` (POST /voice, GET /voice/state) | ✅ Done — Phase 3 |
+| Voice state helpers | `core/state.js` (writeVoiceInput, readVoiceInput, consumeVoiceInput, readVoiceState) | ✅ Done — Phase 3 |
+| Voice TUI integration | `ui/App.jsx` (500ms poll, auto-submit), `ui/StatusBar.jsx` (voice indicator) | ✅ Done — Phase 3 |
+| Python deps | `requirements.txt` | ✅ Done — Phase 3 |
+| Startup script | `scripts/start.sh`, `start.sh` (symlink) | ✅ Done |
 | TUI components | `ui/App.jsx`, `ui/AgentPane.jsx`, `ui/StatusBar.jsx`, `ui/BusMonitorPanel.jsx`, `ui/TerminalColorManager.jsx` | ✅ Done — Phase 4 |
 | PM orchestrator | `agents/project-manager.js` (loop) | 🔜 Phase 5 |
 
-### Next Steps for Phase 3: Voice Layer
+### Phase 3 Voice Layer — COMPLETE
 
-1. Install Python dependencies: `pip install faster-whisper silero-vad openwakeword loguru sounddevice`
-2. Build `voice/vad.py` — mic capture + silero-vad speech detection, Python asyncio
-3. Build `voice/transcriber.py` — faster-whisper wrapper, target < 2s latency, local model
-4. Build `bridge/hotkey-fallback.js` — Node.js F5 push-to-talk trigger, posts to bridge server
-5. Build `voice/wake-word.py` — openWakeWord "Hey Forge" trigger for hands-free mode
-6. Build `voice/tts.py` — optional TTS response via ElevenLabs API or macOS `say`
-7. Test: hold F5, speak, release → transcribed text sent to active agent
-8. Verify: transcription latency < 2s end-to-end, fully offline
+All voice pipeline files built and integrated. See Section 12D for full details.
+
+**To use voice now:**
+```bash
+pip install -r requirements.txt   # one-time Python dep install
+./start.sh --voice                # push-to-talk (spacebar toggle)
+./start.sh --voice=auto           # always-listening auto-VAD
+./start.sh --voice=wake           # "Hey Forge" wake word
+```
+
+### Next Steps — Phase 5: PM Orchestrator Loop
+
+1. Build PM orchestrator loop in `agents/project-manager.js` — receive high-level goal, create task list, dispatch with `publish()`
+2. Wire `task:dispatched`, `task:done`, `task:failed` bus events to `terminalStatus` in `state.json`
+3. Enforce max-step budget of 20 (configurable in `.terminalforge/config.json`)
+4. PM must log every dispatch decision to `messages.log`
+5. Test: give PM a goal → watch agents execute autonomously in the TUI
 
 ---
 
@@ -529,3 +543,108 @@ Width allocation (terminal >= 160 cols): active pane 36%, each of 4 inactive pan
 - Streaming pattern: adds `{role:'assistant', text:'', streaming:true}` placeholder, updates via setState callback in onToken, marks streaming:false on complete
 - `goToTerminal` writes state.json directly (not via direction-based switchTerminal) since target index is known
 - State polling every 1s picks up bridge server vol-button changes while TUI is running
+
+---
+
+## 12D. Phase 3 Voice Layer Build — Complete (May 2026)
+
+Full voice pipeline built. Transcription is fully offline via faster-whisper. Three modes supported. TUI auto-submits transcribed text to the active agent.
+
+### Architecture
+
+```
+Mic → sounddevice InputStream → silero-vad VADIterator (512-sample chunks)
+    → speech detected → accumulate audio → faster-whisper transcribe()
+    → POST localhost:3333/voice → bridge writes voice_input.json (atomic)
+    → TUI polls every 500ms → auto-submits to active agent via handleSubmit()
+```
+
+### Three Voice Modes
+
+| Mode | How to Start | How It Works |
+|---|---|---|
+| push-to-talk | `npm run voice` + `npm run voice:hotkey` | Spacebar/R/F5 in hotkey terminal toggles voice_state.json recording flag; Python polls file |
+| auto-vad | `npm run voice:auto` | silero-vad runs continuously; 1.5s silence ends utterance |
+| wake-word | `npm run voice:wake` | openWakeWord listens for "Hey Forge"; on detect, switches to auto-vad for one utterance |
+
+### Files Built
+
+| File | What It Does |
+|---|---|
+| `voice/pipeline.py` | Main coordinator. Loads transcriber, runs mode loop (push_to_talk / run_auto_vad / run_wake_word), POSTs result to localhost:3333/voice. Args: --mode, --model, --debug. |
+| `voice/transcriber.py` | Transcriber class. Loads faster-whisper WhisperModel (base.en, int8 CPU by default). transcribe(audio_array) → str. Built-in vad_filter removes silence segments. |
+| `voice/vad.py` | record_push_to_talk(state_path) — records while voice_state.json status="recording". record_auto_vad(model, VADIterator) — streams 512-sample chunks, detects speech start/end via VADIterator, returns audio on silence. |
+| `voice/wake-word.py` | WakeWordDetector class. Uses openwakeword.model.Model. listen_for_wake_word() → bool. Falls back to built-in "alexa" model if custom "hey_forge" not trained. |
+| `voice/tts.py` | speak(text, provider, voice, blocking). speak_say() — macOS say via non-blocking Popen. speak_elevenlabs() — ElevenLabs SDK. Off by default; enable in config.json. |
+| `bridge/hotkey-fallback.js` | readline raw mode. Spacebar/R/F5 toggles recording. ESC cancels. Atomic rename to write voice_state.json. Polls pipeline status for display feedback. |
+
+### Integration Points Updated
+
+| File | Change |
+|---|---|
+| `bridge/server.js` | Added POST /voice — reads activeTerminal from state.json, calls writeVoiceInput(), returns targetTerminal. Added GET /voice/state. |
+| `core/state.js` | Added writeVoiceInput({text, targetTerminal, confidence}), readVoiceInput(), consumeVoiceInput(), readVoiceState(), writeVoiceState(). All use atomic rename write. |
+| `ui/App.jsx` | Added voiceStatus state. Added 500ms useEffect polling voice_input.json and voice_state.json. On new unconsumed input: mark consumed → call handleSubmit(text). |
+| `ui/StatusBar.jsx` | Added VOICE_DISPLAY map. Shows 👂/🎤/⌨ indicator beside mode badge when voice pipeline is running. |
+
+### File-Based IPC Schema
+
+`voice_state.json` — written by Python pipeline and hotkey-fallback.js:
+```json
+{ "status": "idle", "mode": "push-to-talk", "recording": false, "wakeWordDetected": false, "updatedAt": "..." }
+```
+Status values: `idle` | `listening` | `recording` | `transcribing`
+
+`voice_input.json` — written by bridge server, polled by TUI:
+```json
+{ "text": "implement a GET /ping endpoint", "targetTerminal": 2, "confidence": 1.0, "consumed": false, "timestamp": "..." }
+```
+
+### Python Dependencies
+
+| Package | Purpose |
+|---|---|
+| `faster-whisper>=1.0.0` | Local offline STT — CTranslate2 Whisper int8 |
+| `silero-vad>=5.1.2` | VADIterator streaming speech detection |
+| `sounddevice>=0.5.1` | Cross-platform mic capture |
+| `numpy>=1.24.0` | Audio buffer handling |
+| `loguru>=0.7.2` | Logging (project standard for Python) |
+| `requests>=2.32.0` | HTTP POST to bridge server |
+| `openwakeword>=0.6.0` | "Hey Forge" wake word detection (optional) |
+
+---
+
+## 12E. Startup Script — Complete (May 2026)
+
+Single-command launcher `scripts/start.sh` (symlinked as `./start.sh`) that handles all setup and starts the full stack.
+
+### What It Does (7 Steps)
+
+| Step | Action |
+|---|---|
+| 1 | Checks Node.js version — fails clearly if < v18 |
+| 2 | Checks Python version — disables voice silently if Python 3.11+ not found |
+| 3 | Runs `npm install` only if node_modules missing or package.json newer |
+| 4 | Checks each Python package individually — only pip installs what is missing |
+| 5 | Validates .env exists and ANTHROPIC_API_KEY starts with `sk-` |
+| 6 | Creates .terminalforge/ with fresh state.json, resets voice_state.json, clears stale voice_input.json |
+| 7 | Prompts for voice mode (1=push-to-talk, 2=auto-vad, 3=wake-word, 4=none) if not passed as flag |
+
+Then launches: bridge server (background, health-checked) → voice pipeline (background, if enabled) → hotkey controller (new iTerm2/Terminal.app window, push-to-talk only) → TUI (foreground).
+
+On Ctrl+C: trap kills bridge and voice PIDs, resets voice_state.json to idle.
+
+### npm Scripts Added
+
+| Command | What it does |
+|---|---|
+| `npm run go` | `./start.sh` — interactive |
+| `npm run go:voice` | `./start.sh --voice` — push-to-talk |
+| `npm run go:auto` | `./start.sh --voice=auto` — auto-VAD |
+| `npm run go:no-voice` | `./start.sh --no-voice` — text-only |
+| `npm run go:debug` | `./start.sh --debug` — DEBUG=tf:* |
+| `npm run voice` | `python3 voice/pipeline.py` |
+| `npm run voice:auto` | `python3 voice/pipeline.py --mode auto-vad` |
+| `npm run voice:wake` | `python3 voice/pipeline.py --mode wake-word` |
+| `npm run voice:hotkey` | `node bridge/hotkey-fallback.js` |
+| `npm run voice:debug` | `python3 voice/pipeline.py --debug` |
