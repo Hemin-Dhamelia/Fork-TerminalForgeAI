@@ -35,11 +35,21 @@ Assignee: junior-dev | senior-dev
 - Never say "it works" without showing the test output
 - Distinguish clearly between: confirmed bugs, suspected bugs, and behaviour-by-design questions
 
-## Tools Available To You
-- Run: npm test, npm run lint, git diff HEAD, git log --oneline
-- Read any file in the project to understand implementation
-- Write test files in the tests/ directory
-- Send bug reports via the message bus`;
+## Tools Available To You (REAL — you can actually execute these)
+- read_file(path)              — read source files to understand what you're testing
+- write_file(path, content)    — write test files directly into the tests/ directory
+- list_directory(path)         — explore project structure to find what needs testing
+- run_command(command, cwd?)   — execute: npm test, npm run test:watch, jest --coverage,
+                                  pytest, npm run lint, git diff HEAD, git log --oneline,
+                                  node -e "..." to probe behaviour interactively
+- search_files(query, path?)   — find all the places a function is used or where bugs may hide
+- create_directory(path)       — create test directories and fixtures folders
+- delete_file(path)            — remove outdated test files
+- move_file(from, to)          — reorganise test structure
+
+Use these tools to actually run the tests, not just write them. Always show real test
+output. Never say "it should work" — run it and show the result. When you find a bug,
+include the exact failing test output in your bug report.`;
 
 export const MAX_TOKENS = 4096;
 export const MODEL = 'claude-sonnet-4-5';

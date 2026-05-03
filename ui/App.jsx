@@ -23,7 +23,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Box, useInput, useStdout, useStdin } from 'ink';
 
-import { routePrompt, clearHistory } from '../core/agent-router.js';
+import { routePrompt, clearHistory, activeProvider, activeModel, getAgentProviderBadge } from '../core/agent-router.js';
 import { subscribe, subscribeAll, unsubscribe, publish, readLog, AGENT_NAMES } from '../core/message-bus.js';
 import { readState, setTerminalStatus, switchTerminal, writeState, readVoiceInput, consumeVoiceInput, readVoiceState, writeVoiceState } from '../core/state.js';
 import { getAgentIdByTerminal } from '../core/context-manager.js';
@@ -437,6 +437,8 @@ export default function App() {
         busMessageCount={busMessages.length}
         voiceStatus={voiceStatus}
         voiceMode={voiceMode}
+        providerBadge={getAgentProviderBadge(activeTerminal)}
+        ollamaModel={activeModel}
         width={totalW}
       />
 
@@ -457,6 +459,7 @@ export default function App() {
               onSubmit={isActive ? handleSubmit : undefined}
               isProcessing={isActive && isProcessing}
               voiceStatus={isActive ? voiceStatus : 'idle'}
+              provider={getAgentProviderBadge(t)}
               width={isActive ? activePaneW : inactiveW}
               height={paneH}
             />

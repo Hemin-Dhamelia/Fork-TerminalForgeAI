@@ -9,6 +9,8 @@
   "scripts": {
     "start": "node bridge/server.js",
     "go": "bash scripts/start.sh",
+    "go:claude": "LLM_PROVIDER=anthropic bash scripts/start.sh",
+    "go:ollama": "LLM_PROVIDER=ollama bash scripts/start.sh",
     "go:voice": "bash scripts/start.sh --voice",
     "go:auto": "bash scripts/start.sh --voice=auto",
     "go:no-voice": "bash scripts/start.sh --no-voice",
@@ -18,7 +20,11 @@
     "agent": "node scripts/agent-repl.js",
     "monitor": "node scripts/bus-monitor.js",
     "ui": "npx tsx scripts/ui.js",
+    "ui:claude": "LLM_PROVIDER=anthropic npx tsx scripts/ui.js",
+    "ui:ollama": "LLM_PROVIDER=ollama npx tsx scripts/ui.js",
     "ui:debug": "DEBUG=tf:* npx tsx scripts/ui.js",
+    "ui:claude:debug": "LLM_PROVIDER=anthropic DEBUG=tf:* npx tsx scripts/ui.js",
+    "ui:ollama:debug": "LLM_PROVIDER=ollama DEBUG=tf:* npx tsx scripts/ui.js",
     "voice": "python3 voice/pipeline.py",
     "voice:auto": "python3 voice/pipeline.py --mode auto-vad",
     "voice:wake": "python3 voice/pipeline.py --mode wake-word",
@@ -38,6 +44,7 @@
     "express": "^4.19.2",
     "ink": "^4.4.1",
     "ink-text-input": "^5.0.1",
+    "openai": "^6.35.0",
     "react": "^18.3.1",
     "simple-git": "^3.25.0"
   },

@@ -79,6 +79,41 @@ cleanup() {
 }
 trap cleanup SIGINT SIGTERM EXIT
 
+# -- Load .env into bash so OLLAMA_MODEL, OLLAMA_BASE_URL etc. are available ----
+# We parse it manually (grep + sed) instead of `source .env` so comments and
+# multi-line values don't break the shell.  Only KEY=VALUE lines are imported;
+# lines starting with # and blank lines are ignored.
+if [ -f "$DIR/.env" ]; then
+  while IFS='=' read -r key rest; do
+    # Skip comments and empty lines
+    [[ "$key" =~ ^[[:space:]]*# ]] && continue
+    [[ -z "$key" ]] && continue
+    # Only export valid identifier keys; strip leading/trailing whitespace
+    key=$(echo "$key" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+    rest=$(echo "$rest" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+    [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
+    # Don't override values already set in the environment
+    [ -z "${!key+x}" ] && export "$key=$rest"
+  done < "$DIR/.env"
+fi
+
+# -- Provider (can be overridden by LLM_PROVIDER env var before calling this script)
+# e.g.  LLM_PROVIDER=ollama bash scripts/start.sh --voice
+PROVIDER="${LLM_PROVIDER:-anthropic}"
+
+# -- Detect which providers are actually needed (global + per-agent overrides) -
+NEEDS_OLLAMA=false
+NEEDS_ANTHROPIC=false
+[ "$PROVIDER" = "ollama" ]    && NEEDS_OLLAMA=true
+[ "$PROVIDER" = "anthropic" ] && NEEDS_ANTHROPIC=true
+for _i in 1 2 3 4 5; do
+  _VAR="AGENT_${_i}_PROVIDER"
+  _VAL="${!_VAR:-}"
+  [ "$_VAL" = "ollama" ]    && NEEDS_OLLAMA=true
+  [ "$_VAL" = "anthropic" ] && NEEDS_ANTHROPIC=true
+done
+OLLAMA_MDL="${OLLAMA_MODEL:-llama3.1:8b}"
+
 # -- Argument parsing ---------------------------------------------------------
 VOICE_MODE=""          # empty = ask, "none" = skip, "push-to-talk"|"auto"|"wake" = start
 START_HOTKEY=false
@@ -135,7 +170,13 @@ echo "     ██║   ███████╗██║  ██║██║ ╚
 echo "     ╚═╝   ╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝╚═╝╚═╝  ╚═══╝╚═╝  ╚═╝╚══════╝"
 echo -e "${NC}"
 echo -e "  ${DIM}macOS multi-agent AI development platform${NC}"
-echo -e "  ${DIM}5 Claude agents · Voice input · Agent-to-agent messaging${NC}"
+if $NEEDS_OLLAMA && $NEEDS_ANTHROPIC; then
+  echo -e "  ${DIM}5 agents · Mixed (Claude + Ollama/${OLLAMA_MDL}) · Voice input · Agent-to-agent messaging${NC}"
+elif $NEEDS_OLLAMA; then
+  echo -e "  ${DIM}5 agents · Ollama (${OLLAMA_MDL}) · Voice input · Agent-to-agent messaging${NC}"
+else
+  echo -e "  ${DIM}5 agents · Anthropic Claude · Voice input · Agent-to-agent messaging${NC}"
+fi
 echo ""
 echo -e "  ${DIM}────────────────────────────────────────────────────────────${NC}"
 echo ""
@@ -278,17 +319,39 @@ step "5/7" "Checking environment configuration..."
 if [ ! -f "$DIR/.env" ]; then
   fail ".env file not found."
   info "Create it: cp .env.example .env"
-  info "Then add:  ANTHROPIC_API_KEY=sk-ant-api03-..."
   exit 1
 fi
 
-if ! grep -q "ANTHROPIC_API_KEY=sk-" "$DIR/.env" 2>/dev/null; then
-  fail "ANTHROPIC_API_KEY missing or invalid in .env"
-  info "Edit .env and set ANTHROPIC_API_KEY=sk-ant-api03-..."
-  exit 1
+# NEEDS_OLLAMA / NEEDS_ANTHROPIC / OLLAMA_MDL already set above (before the banner)
+
+# Validate Anthropic key if any agent uses it
+if $NEEDS_ANTHROPIC; then
+  if ! grep -q "ANTHROPIC_API_KEY=sk-" "$DIR/.env" 2>/dev/null; then
+    fail "ANTHROPIC_API_KEY missing or invalid in .env"
+    info "Edit .env and set ANTHROPIC_API_KEY=sk-ant-api03-..."
+    exit 1
+  fi
+  ok "Anthropic API key found"
 fi
 
-ok ".env looks good"
+# Validate Ollama if any agent uses it
+if $NEEDS_OLLAMA; then
+  OLLAMA_URL="${OLLAMA_BASE_URL:-http://localhost:11434}"
+  if ! curl -sf "$OLLAMA_URL" &>/dev/null; then
+    fail "Ollama server not running at $OLLAMA_URL"
+    info "Start it with: ollama serve"
+    info "Or install from: https://ollama.com"
+    exit 1
+  fi
+  # Check the model is actually pulled (OLLAMA_MDL was read from .env earlier)
+  if ! ollama list 2>/dev/null | grep -q "^${OLLAMA_MDL}"; then
+    fail "Model '${OLLAMA_MDL}' not found in Ollama."
+    info "Pull it with: ollama pull ${OLLAMA_MDL}"
+    info "Or change OLLAMA_MODEL in .env"
+    exit 1
+  fi
+  ok "Ollama running · model: ${OLLAMA_MDL}"
+fi
 
 # =============================================================================
 #  STEP 6 — Initialise runtime directory
@@ -462,7 +525,13 @@ fi
 echo ""
 echo -e "  ${DIM}────────────────────────────────────────────────────────────${NC}"
 echo ""
-echo -e "  ${GREEN}${BOLD}Everything is ready.${NC}  Launching TUI now...\n"
+if $NEEDS_OLLAMA && $NEEDS_ANTHROPIC; then
+  echo -e "  ${GREEN}${BOLD}Everything is ready.${NC}  Launching TUI with ${MAGENTA}Claude${NC} + ${GREEN}Ollama (${OLLAMA_MDL})${NC}...\n"
+elif $NEEDS_OLLAMA; then
+  echo -e "  ${GREEN}${BOLD}Everything is ready.${NC}  Launching TUI with ${GREEN}Ollama (${OLLAMA_MDL})${NC}...\n"
+else
+  echo -e "  ${GREEN}${BOLD}Everything is ready.${NC}  Launching TUI with ${MAGENTA}Anthropic Claude${NC}...\n"
+fi
 echo -e "  ${DIM}Services running in background:${NC}"
 echo -e "  ${DIM}  🌉  Bridge server     http://127.0.0.1:3333${NC}"
 [ -n "$VOICE_PID" ] && echo -e "  ${DIM}  🎤  Voice pipeline   mode=$PIPELINE_MODE_ARG${NC}"
@@ -482,8 +551,10 @@ echo ""
 sleep 1
 
 # -- Start TUI (foreground — Ctrl+C exits everything via trap) ----------------
+# Pass LLM_PROVIDER explicitly so the TUI always uses the correct provider
+# regardless of what is set in .env
 if $DEBUG_MODE; then
-  DEBUG=tf:* npx tsx "$DIR/scripts/ui.js"
+  LLM_PROVIDER="$PROVIDER" DEBUG=tf:* npx tsx "$DIR/scripts/ui.js"
 else
-  npx tsx "$DIR/scripts/ui.js"
+  LLM_PROVIDER="$PROVIDER" npx tsx "$DIR/scripts/ui.js"
 fi
