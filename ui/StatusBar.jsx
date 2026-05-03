@@ -30,13 +30,18 @@ export default function StatusBar({
   busMessageCount,
   voiceStatus,
   voiceMode,
+  providerBadge,
+  ollamaModel,
   width,
 }) {
   const agent   = AGENT_INFO[activeTerminal] || {};
   const modeCol = mode === 'auto' ? 'yellow' : 'gray';
 
   // Active voice state overrides idle hint
-  const voice = VOICE_DISPLAY[voiceStatus] || (voiceMode ? VOICE_IDLE_HINT[voiceMode] : null);
+  const voice   = VOICE_DISPLAY[voiceStatus] || (voiceMode ? VOICE_IDLE_HINT[voiceMode] : null);
+  // providerBadge = { label, short, color } from getAgentProviderBadge()
+  const pBadge  = providerBadge || { label: 'Claude', color: 'magenta' };
+  const modelLabel = pBadge.label === 'Ollama' && ollamaModel ? ollamaModel : '';
 
   return (
     <Box width={width} paddingX={1} backgroundColor="black" flexShrink={0}>
@@ -46,6 +51,11 @@ export default function StatusBar({
 
       {/* Mode */}
       <Text bold color={modeCol}>{(mode || 'manual').toUpperCase()}</Text>
+      <Text color="gray">  .  </Text>
+
+      {/* LLM provider badge */}
+      <Text bold color={pBadge.color}>{pBadge.label}</Text>
+      {modelLabel ? <Text color="gray"> ({modelLabel})</Text> : null}
       <Text color="gray">  .  </Text>
 
       {/* Active agent */}

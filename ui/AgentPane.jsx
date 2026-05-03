@@ -130,6 +130,7 @@ export default function AgentPane({
   onSubmit,
   isProcessing,
   voiceStatus,
+  provider,
   width,
   height,
 }) {
@@ -193,6 +194,11 @@ export default function AgentPane({
         >
           {' '}{statusStyle.dot}{isActive ? ` ${statusStyle.label}` : ''}
         </Text>
+        {provider && (
+          <Text color={provider.color} bold>
+            {' '}[{provider.short}]
+          </Text>
+        )}
       </Box>
 
       {/* -- Divider -- */}
