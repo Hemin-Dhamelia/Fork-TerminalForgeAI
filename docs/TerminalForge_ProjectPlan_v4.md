@@ -850,3 +850,218 @@ npm run test:agents     # Phase 2 — agent unit tests (47 tests)
 npm run test:smoke      # Phase 2 — live Claude API streaming test (requires .env)
 npm run lint            # ESLint check on all JS files
 ```
+
+---
+
+## 12F. Ollama Support & Mixed Provider Mode — Complete (May 2026)
+
+TerminalForge now supports Ollama as a fully offline, zero-cost LLM provider alongside Anthropic Claude. Both providers can run simultaneously with different agents routed to each.
+
+### Provider Architecture
+
+`core/agent-router.js` maintains two independent streaming loops:
+
+| Loop | Format | Client |
+|---|---|---|
+| `runWithTools_Anthropic` | Anthropic content blocks (`tool_use` / `tool_result`) | `@anthropic-ai/sdk` |
+| `runWithTools_Ollama` | OpenAI function calling (`tool_calls` / `tool` role) | `openai` npm package (OpenAI-compatible) |
+
+Both loops support the same 8 local file/shell tools. The public `routePrompt()` API is identical regardless of provider.
+
+### Per-Agent Provider Routing
+
+Each terminal can use a different provider via environment variables:
+
+```env
+LLM_PROVIDER=anthropic      # global default
+
+AGENT_1_PROVIDER=ollama     # Junior Dev  → Ollama
+AGENT_2_PROVIDER=anthropic  # Senior Dev  → Claude
+AGENT_3_PROVIDER=ollama     # QA Engineer → Ollama
+AGENT_4_PROVIDER=ollama     # DevOps      → Ollama
+AGENT_5_PROVIDER=anthropic  # PM          → Claude
+```
+
+`getProviderForTerminal(N)` reads `AGENT_N_PROVIDER`, falling back to `LLM_PROVIDER`.
+
+### API Client Fix
+
+Both clients are always initialised at startup regardless of the global provider setting. This fixes a crash in mixed mode where `ollamaClient` was `null` when `LLM_PROVIDER=anthropic` but per-agent overrides required Ollama.
+
+### start.sh Provider Validation
+
+`scripts/start.sh` now:
+1. Parses `.env` into bash environment at startup (so `OLLAMA_MODEL` is available)
+2. Detects all providers needed (global + all `AGENT_N_PROVIDER` overrides)
+3. Validates both Anthropic API key AND Ollama server reachability if either is needed
+4. Shows `Mixed (Claude + Ollama/model-name)` banner when running both
+
+### npm Scripts Added
+
+| Command | What It Does |
+|---|---|
+| `npm run go:claude` | Full stack — force all agents to Claude |
+| `npm run go:ollama` | Full stack — force all agents to Ollama |
+| `npm run ui:claude` | TUI only — force Claude |
+| `npm run ui:ollama` | TUI only — force Ollama |
+| `npm run ui:claude:debug` | TUI + Claude + verbose logging |
+| `npm run ui:ollama:debug` | TUI + Ollama + verbose logging |
+
+### First-Time Ollama Setup
+
+```bash
+brew install ollama
+ollama pull qwen2.5-coder:7b   # 8 GB RAM — recommended for code tasks
+npm run go:ollama
+```
+
+### Recommended RAM Guide
+
+| Model | RAM | Best For |
+|---|---|---|
+| `llama3.2` | 4 GB | General tasks, low-resource machines |
+| `llama3.1:8b` | 8 GB | Balanced general purpose |
+| `qwen2.5-coder:7b` | 8 GB | Code generation and review |
+| `qwen2.5-coder:14b` | 16 GB | Strong code model |
+| `llama3.1:32b` | 32 GB | Very capable, near-Claude quality |
+
+---
+
+## 12G. Voice TTS Output — Complete (May 2026)
+
+Agent responses are now spoken aloud automatically using macOS `say`. No setup required.
+
+### Architecture
+
+```
+routePrompt() completes → fullResponse returned
+  → speak(fullResponse) called from ui/App.jsx
+  → cleanForSpeech() strips markdown/code blocks/URLs
+  → truncateAtSentence() cuts at first sentence break near 420 chars
+  → spawn('say', ['-v', voice, '-r', rate, spoken])  ← non-blocking
+```
+
+### Startup Greeting
+
+When the TUI launches (`scripts/ui.js`), FORGE greets the user:
+
+> *"Hello. My name is FORGE. Your AI development team is online and ready."*
+
+### Interruption
+
+When the user submits a new prompt, `stopSpeaking()` is called immediately — the current utterance is killed so FORGE never talks over itself.
+
+### Smart Fallback for Code-Only Responses
+
+Ollama coding models often respond with a bare code block and no prose. `cleanForSpeech()` strips the code block leaving empty text. The fallback logic detects this:
+- Response contained ` ``` ` → says: *"Here is the code. Check the screen for the full output."*
+- Response contained `` ` `` → says: *"Done. Check the screen for the result."*
+
+### Tool-Only Response Summary
+
+Ollama agents sometimes use tools without producing final text (e.g. `write_file` then stop). In that case `runWithTools_Ollama` generates a spoken summary:
+
+> *"Done. I used write_file, run_command to complete the task. Check the screen for the full output."*
+
+This text is also emitted as a `✓` line in the TUI.
+
+### New File: `core/tts.js`
+
+| Export | Description |
+|---|---|
+| `speak(text, opts?)` | Speak text aloud — strips markdown, truncates, non-blocking |
+| `stopSpeaking()` | Kill current utterance immediately |
+| `cleanForSpeech(text)` | Strip markdown/code/URLs, return clean prose |
+
+Config via `.env`:
+
+| Variable | Default | Description |
+|---|---|---|
+| `TTS_PROVIDER` | `say` | `"say"` (macOS) or `"elevenlabs"` |
+| `TTS_VOICE` | `Alex` | macOS voice name or ElevenLabs voice ID |
+| `TTS_RATE` | `185` | Words per minute (say only) |
+| `TTS_MAX_CHARS` | `420` | Max chars spoken per response |
+
+Also configurable via `.terminalforge/config.json`.
+
+### Per-Agent Provider Badges in TUI
+
+Each AgentPane header now shows a small badge:
+- **`[C]`** (magenta) — agent is using Claude
+- **`[O]`** (green) — agent is using Ollama
+
+The status bar shows the active terminal's provider badge and updates when switching agents.
+
+---
+
+## 12H. Local File & Shell Tools — Complete (May 2026)
+
+All 5 agents (both Claude and Ollama) have access to 8 local file system and shell tools via `core/tools.js`.
+
+### Tools Available
+
+| Tool | Parameters | Description |
+|---|---|---|
+| `read_file` | `path` | Read a local file (max 150,000 bytes) |
+| `write_file` | `path`, `content` | Create or overwrite a file |
+| `list_directory` | `path`, `recursive?` | List files in a directory |
+| `run_command` | `command`, `cwd?` | Run a shell command (30s timeout, 30,000 char output cap) |
+| `search_files` | `pattern`, `directory?`, `type?` | Search by filename glob or content string |
+| `delete_file` | `path` | Delete a file |
+| `create_directory` | `path` | Create directory with parents |
+| `move_file` | `source`, `destination` | Move or rename a file |
+
+### Safety
+
+- All paths are resolved relative to the project root
+- `SKIP_DIRS` automatically excludes: `node_modules`, `.git`, `__pycache__`, `.next`, `dist`, `build`, `.cache`, `coverage`, `.venv`
+- Command output capped at 30,000 characters
+- File reads capped at 150,000 bytes
+- Commands have a 30-second timeout
+
+### Tool Format Conversion
+
+Anthropic and Ollama use different tool schemas. `core/agent-router.js` converts at startup:
+
+```javascript
+// Anthropic format (TOOL_DEFINITIONS) — used as-is:
+{ name, description, input_schema: { type, properties, required } }
+
+// Ollama format (OLLAMA_TOOLS) — converted via toOllamaTools():
+{ type: 'function', function: { name, description, parameters } }
+```
+
+---
+
+## 13.11 Provider Switching Commands (Added May 2026)
+
+### Switch All Agents
+
+```bash
+npm run go:claude        # all 5 agents → Claude (Anthropic)
+npm run go:ollama        # all 5 agents → Ollama (local, offline)
+npm run ui:claude        # TUI only → Claude
+npm run ui:ollama        # TUI only → Ollama
+```
+
+### Mixed Mode (Claude + Ollama simultaneously)
+
+Edit `.env` and uncomment per-agent overrides:
+```env
+AGENT_1_PROVIDER=ollama      # Junior Dev
+AGENT_2_PROVIDER=anthropic   # Senior Dev
+AGENT_3_PROVIDER=ollama      # QA Engineer
+AGENT_4_PROVIDER=ollama      # DevOps
+AGENT_5_PROVIDER=anthropic   # Project Manager
+```
+Then run: `npm run go`
+
+Each pane shows `[C]` (Claude) or `[O]` (Ollama) badge. The startup script validates both providers automatically.
+
+### Ollama First-Time Setup
+
+```bash
+brew install ollama
+ollama pull qwen2.5-coder:7b   # recommended model
+npm run go:ollama
+```

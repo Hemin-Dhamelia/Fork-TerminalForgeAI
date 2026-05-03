@@ -784,3 +784,119 @@ cat .terminalforge/config.json          # user config (maxSteps, voiceMode, etc.
 curl http://localhost:3333/health       # bridge health check
 curl http://localhost:3333/state        # bridge — live state.json
 ```
+
+---
+
+## RECENT ADDITIONS (May 2026)
+
+### ✅ Ollama Support & Mixed Provider Mode
+
+`core/agent-router.js` now supports two LLM providers simultaneously:
+
+**Global provider switching:**
+```bash
+npm run go:claude        # all agents → Anthropic Claude
+npm run go:ollama        # all agents → Ollama (local, offline)
+```
+
+**Per-agent provider overrides (mixed mode):** Set `AGENT_N_PROVIDER` in `.env`:
+```env
+AGENT_1_PROVIDER=ollama     # Junior Dev → local model
+AGENT_2_PROVIDER=anthropic  # Senior Dev → Claude
+AGENT_3_PROVIDER=ollama     # QA Engineer → local model
+AGENT_4_PROVIDER=ollama     # DevOps → local model
+AGENT_5_PROVIDER=anthropic  # PM → Claude
+```
+
+**Architecture:**
+- `runWithTools_Anthropic()` — Anthropic content blocks format, `@anthropic-ai/sdk`
+- `runWithTools_Ollama()` — OpenAI function calling format, `openai` npm package
+- Both clients always initialized at startup (fixes null-client crash in mixed mode)
+- `getProviderForTerminal(N)` reads `AGENT_N_PROVIDER` → falls back to `LLM_PROVIDER`
+- `getAgentProviderBadge(N)` → `{ label, short, color }` used by TUI
+
+**TUI provider badges:** Each AgentPane header shows `[C]` (magenta, Claude) or `[O]` (green, Ollama). StatusBar shows active terminal's provider.
+
+**start.sh improvements:**
+- Parses `.env` into bash so `OLLAMA_MODEL` is available without separate export
+- Detects all needed providers (global + per-agent overrides)
+- Validates both Anthropic API key AND Ollama server if either is needed
+- Shows `Mixed (Claude + Ollama/model)` banner for mixed mode
+
+**scripts/ui.js fix:** API key check now only validates Anthropic key when at least one agent actually uses Anthropic. Ollama-only setups no longer fail on missing `ANTHROPIC_API_KEY`.
+
+### ✅ Voice TTS Output (core/tts.js)
+
+New file `core/tts.js` — Node.js TTS module called directly from the TUI.
+
+**Startup greeting** (in `scripts/ui.js`):
+> *"Hello. My name is FORGE. Your AI development team is online and ready."*
+
+**After every agent response** (in `ui/App.jsx`):
+- `speak(fullResponse)` called after `routePrompt()` completes
+- `cleanForSpeech()` strips markdown, code blocks, tool output, URLs
+- `truncateAtSentence()` cuts at nearest sentence break ≤ 420 chars
+- macOS `say -v Alex -r 185` spawned non-blocking
+
+**Interruption:** `stopSpeaking()` called when user submits new prompt.
+
+**Fallbacks:**
+- Code-only response (Ollama): *"Here is the code. Check the screen for the full output."*
+- Tool-only Ollama response: *"Done. I used [tools] to complete the task."* (also shown in TUI)
+
+**Config via `.env`:** `TTS_PROVIDER`, `TTS_VOICE`, `TTS_RATE`, `TTS_MAX_CHARS`
+
+### ✅ Local File & Shell Tools (core/tools.js)
+
+All 5 agents have access to 8 local tools:
+`read_file`, `write_file`, `list_directory`, `run_command`, `search_files`, `delete_file`, `create_directory`, `move_file`
+
+Tools work identically for both Claude and Ollama agents. Anthropic format used natively; Ollama format converted via `toOllamaTools()`.
+
+### Updated File List
+
+| File | Status | Notes |
+|---|---|---|
+| `core/agent-router.js` | ✅ Updated | Dual provider, per-agent routing, always-init clients |
+| `core/tools.js` | ✅ New | 8 local file/shell tools for all agents |
+| `core/tts.js` | ✅ New | Node.js TTS — speak(), stopSpeaking(), cleanForSpeech() |
+| `scripts/ui.js` | ✅ Updated | Provider-aware API key check, startup greeting |
+| `scripts/start.sh` | ✅ Updated | .env parsing, mixed provider validation |
+| `ui/App.jsx` | ✅ Updated | speak() after response, stopSpeaking() on submit |
+| `ui/AgentPane.jsx` | ✅ Updated | provider prop → [C]/[O] badge in header |
+| `ui/StatusBar.jsx` | ✅ Updated | providerBadge prop — shows active agent's provider |
+| `package.json` | ✅ Updated | go:claude, go:ollama, ui:claude, ui:ollama scripts |
+| `.env.example` | ✅ Updated | AGENT_N_PROVIDER examples, TTS config |
+
+### Updated Monorepo Structure
+
+```
+core/
+  ├── agent-router.js    ✅ Dual provider (Anthropic + Ollama), per-agent routing
+  ├── tools.js           ✅ NEW — 8 local file/shell tools, shared by all agents
+  ├── tts.js             ✅ NEW — Node.js TTS: speak(), stopSpeaking(), cleanForSpeech()
+  ├── message-bus.js     ✅ EventEmitter bus
+  ├── context-manager.js ✅ Context injection
+  ├── state.js           ✅ State management
+  └── event-listener.js  ✅ Volume event hub
+```
+
+### Updated Commands
+
+```bash
+# Provider switching
+npm run go:claude            # all agents → Claude
+npm run go:ollama            # all agents → Ollama
+npm run ui:claude            # TUI only → Claude
+npm run ui:ollama            # TUI only → Ollama
+npm run ui:claude:debug      # TUI + Claude + verbose logging
+npm run ui:ollama:debug      # TUI + Ollama + verbose logging
+
+# Mixed mode — edit .env AGENT_N_PROVIDER lines, then:
+npm run go                   # validates both providers, starts everything
+
+# Ollama first-time setup
+brew install ollama
+ollama pull qwen2.5-coder:7b
+npm run go:ollama
+```

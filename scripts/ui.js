@@ -30,18 +30,34 @@ if (!process.stdin.isTTY) {
   process.exit(1);
 }
 
-// Validate API key before doing anything
-if (!process.env.ANTHROPIC_API_KEY || !process.env.ANTHROPIC_API_KEY.startsWith('sk-')) {
-  console.error('\n  ❌  ANTHROPIC_API_KEY missing or invalid in .env\n');
-  process.exit(1);
+// Validate API key only when Anthropic is actually needed
+// (global provider OR any per-agent AGENT_N_PROVIDER override)
+const _provider = (process.env.LLM_PROVIDER || 'anthropic').toLowerCase().trim();
+const _needsAnthropic = _provider === 'anthropic' ||
+  [1, 2, 3, 4, 5].some(i =>
+    (process.env[`AGENT_${i}_PROVIDER`] || '').toLowerCase().trim() === 'anthropic'
+  );
+
+if (_needsAnthropic) {
+  if (!process.env.ANTHROPIC_API_KEY || !process.env.ANTHROPIC_API_KEY.startsWith('sk-')) {
+    console.error('\n  ❌  ANTHROPIC_API_KEY missing or invalid in .env\n');
+    process.exit(1);
+  }
 }
 
 import React from 'react';
 import { render } from 'ink';
 import App from '../ui/App.jsx';
+import { speak } from '../core/tts.js';
 
 // Hide cursor for cleaner UI
 process.stdout.write('\x1b[?25l');
+
+// Startup greeting — FORGE introduces itself
+speak(
+  "Hello. My name is FORGE. Your AI development team is online and ready.",
+  { skipClean: true, maxChars: 200 }
+);
 
 const { unmount, waitUntilExit } = render(
   React.createElement(App),

@@ -505,3 +505,78 @@ kill $(lsof -ti:3333) && pkill -f "agent-repl.js" && pkill -f "bus-monitor.js"
 # Kill tmux session
 tmux kill-session -t terminalforge
 ```
+
+---
+
+## Recent Updates (May 2026)
+
+### Ollama Support & Mixed Provider Mode
+
+`core/agent-router.js` now supports Ollama as a local, offline LLM provider alongside Anthropic Claude.
+
+**Provider switching (no .env editing needed):**
+```bash
+npm run go:claude     # force all agents → Claude
+npm run go:ollama     # force all agents → Ollama (offline)
+npm run go            # uses LLM_PROVIDER from .env
+```
+
+**Per-agent provider overrides** — set in `.env`:
+```env
+AGENT_1_PROVIDER=ollama      # T1 Junior Dev  → local model
+AGENT_2_PROVIDER=anthropic   # T2 Senior Dev  → Claude
+AGENT_3_PROVIDER=ollama      # T3 QA Engineer → local model
+AGENT_4_PROVIDER=ollama      # T4 DevOps      → local model
+AGENT_5_PROVIDER=anthropic   # T5 PM          → Claude
+```
+
+**New exports from `core/agent-router.js`:**
+- `getAgentProvider(terminalIndex)` — returns `'anthropic'` or `'ollama'`
+- `getAgentProviderBadge(terminalIndex)` — returns `{ label, short, color }` for TUI display
+
+**TUI badges:** Each AgentPane header shows `[C]` (magenta) for Claude or `[O]` (green) for Ollama.
+
+### Voice TTS Output
+
+New file: `core/tts.js` — Node.js TTS module using macOS `say`.
+
+**Startup greeting** (spoken when TUI starts):
+> *"Hello. My name is FORGE. Your AI development team is online and ready."*
+
+**Agent responses spoken aloud** after every `routePrompt()` completes.
+
+**Config (`.env`):** `TTS_PROVIDER`, `TTS_VOICE`, `TTS_RATE`, `TTS_MAX_CHARS`
+
+### Local File & Shell Tools
+
+New file: `core/tools.js` — 8 tools available to all agents (both Claude and Ollama):
+`read_file`, `write_file`, `list_directory`, `run_command`, `search_files`, `delete_file`, `create_directory`, `move_file`
+
+### Updated Folder Structure
+
+```
+core/
+  ├── agent-router.js    ✅ Dual provider (Anthropic + Ollama), per-agent routing, always-init clients
+  ├── tools.js           ✅ NEW — 8 local file/shell tools, TOOL_DEFINITIONS + executeTool()
+  ├── tts.js             ✅ NEW — speak(), stopSpeaking(), cleanForSpeech()
+  ├── message-bus.js     ✅ EventEmitter bus
+  ├── context-manager.js ✅ Context injection
+  ├── state.js           ✅ State management
+  └── event-listener.js  ✅ Volume event hub
+```
+
+### Updated Current Build Phase
+
+> **All foundation phases complete. Next: Phase 5 PM Orchestrator Loop.**
+
+| Item | Status |
+|---|---|
+| Ollama support (offline agents) | ✅ Complete |
+| Mixed provider mode (Claude + Ollama) | ✅ Complete |
+| Per-agent provider badges [C]/[O] | ✅ Complete |
+| Voice TTS output (`core/tts.js`) | ✅ Complete |
+| Startup greeting ("Hello, I'm FORGE") | ✅ Complete |
+| Local file/shell tools (`core/tools.js`) | ✅ Complete |
+| Fixed null-client crash in mixed mode | ✅ Complete |
+| start.sh .env parsing + mixed validation | ✅ Complete |
+| Phase 5 PM Orchestrator Loop | 🔜 Next |
