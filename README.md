@@ -490,3 +490,149 @@ The full pipeline ran live against the Claude API in a single test:
 
 - **Fork (working copy):** https://github.com/Hemin-Dhamelia/Fork-TerminalForgeAI.git
 - **Upstream main:** https://github.com/TerminalForgeAI/TerminalForgeAI.git
+
+---
+
+## Ollama — Run Agents Locally (Offline)
+
+TerminalForge supports [Ollama](https://ollama.com) as a fully offline, zero-cost alternative to the Claude API.
+
+### First-time Ollama setup
+
+```bash
+# 1. Install Ollama (one-time)
+brew install ollama        # or download from https://ollama.com
+
+# 2. Pull a model (one-time download, 4–8 GB)
+ollama pull qwen2.5-coder:7b   # recommended: strong at code, 8 GB RAM
+ollama pull llama3.1:8b        # general purpose, 8 GB RAM
+ollama pull llama3.2           # lighter option, 4 GB RAM
+
+# 3. Launch TerminalForge with Ollama
+npm run go:ollama
+```
+
+### Switching between Claude and Ollama
+
+```bash
+npm run go:claude          # all 5 agents → Anthropic Claude
+npm run go:ollama          # all 5 agents → Ollama (local, offline)
+npm run go                 # uses whatever LLM_PROVIDER is set in .env
+```
+
+No `.env` editing needed — the npm scripts set the provider at launch time.
+
+---
+
+## Mixed Mode — Claude + Ollama Simultaneously
+
+Run different agents on different providers at the same time. Uncomment these lines in `.env`:
+
+```env
+AGENT_1_PROVIDER=ollama      # Junior Dev  — fast local model
+AGENT_2_PROVIDER=anthropic   # Senior Dev  — Claude (better architecture)
+AGENT_3_PROVIDER=ollama      # QA Engineer — fast local model
+AGENT_4_PROVIDER=ollama      # DevOps      — fast local model
+AGENT_5_PROVIDER=anthropic   # Project Mgr — Claude (better orchestration)
+```
+
+Then run `npm run go` — both providers start simultaneously. The startup script validates both the Anthropic API key and Ollama server.
+
+Each agent pane shows a small badge in its header:
+- **`[C]`** (magenta) — this agent is using Claude
+- **`[O]`** (green) — this agent is using Ollama
+
+The status bar updates to show which provider the currently active agent is using.
+
+---
+
+## Voice Output (TTS)
+
+FORGE speaks aloud using the macOS built-in `say` command — no setup needed.
+
+**On startup:** FORGE greets you: *"Hello. My name is FORGE. Your AI development team is online and ready."*
+
+**After every agent response:** the agent's reply is automatically read aloud (markdown stripped, truncated to the first natural sentence break near 420 characters).
+
+**Interruption:** submitting a new prompt immediately stops the current speech.
+
+### Customising the voice
+
+```env
+# In .env — all optional
+TTS_PROVIDER=say         # "say" (macOS built-in, default) | "elevenlabs"
+TTS_VOICE=Alex           # macOS voice: Alex, Samantha, Daniel, Tom, Fred
+                         # run `say -v ?` to list all installed voices
+TTS_RATE=185             # words per minute
+TTS_MAX_CHARS=420        # max chars spoken per response
+```
+
+For ElevenLabs (higher quality):
+```env
+TTS_PROVIDER=elevenlabs
+ELEVENLABS_API_KEY=sk_...
+```
+
+### Config file
+TTS settings are also stored in `.terminalforge/config.json`:
+```json
+{
+  "ttsEnabled": true,
+  "ttsProvider": "say",
+  "ttsVoice": "Alex",
+  "ttsRate": 185,
+  "ttsMaxChars": 420
+}
+```
+
+---
+
+## Local File & Shell Tools
+
+Every agent (both Claude and Ollama) can read, write, and run things on your local machine. No extra setup required.
+
+| Tool | What it does |
+|---|---|
+| `read_file` | Read any local file |
+| `write_file` | Create or overwrite a file |
+| `list_directory` | List files in a directory |
+| `run_command` | Run a shell command (30s timeout) |
+| `search_files` | Search files by name pattern or content |
+| `delete_file` | Delete a file |
+| `create_directory` | Create a directory (with parents) |
+| `move_file` | Move or rename a file |
+
+All paths are resolved relative to the project root. Output is capped at 30,000 characters. `node_modules`, `.git`, and build directories are automatically skipped in searches.
+
+---
+
+## Provider-Specific npm Scripts
+
+```bash
+# Full stack
+npm run go               # uses LLM_PROVIDER from .env
+npm run go:claude        # force all agents → Claude
+npm run go:ollama        # force all agents → Ollama
+
+# TUI only
+npm run ui:claude        # force Claude
+npm run ui:ollama        # force Ollama
+npm run ui:claude:debug  # Claude + verbose logging
+npm run ui:ollama:debug  # Ollama + verbose logging
+```
+
+---
+
+## Updated Tech Stack
+
+| Layer | Technology | Notes |
+|---|---|---|
+| **AI — Cloud** | Anthropic Claude (`claude-sonnet-4-5`) | Streaming, tool use, per-agent sessions |
+| **AI — Local** | Ollama (any pulled model) | OpenAI-compatible API, fully offline |
+| **Provider routing** | `LLM_PROVIDER` + `AGENT_N_PROVIDER` | Per-agent override, mixed mode supported |
+| **Voice STT** | faster-whisper (local, offline) | < 2s latency, no API cost |
+| **Voice TTS** | macOS `say` / ElevenLabs | Agent responses read aloud automatically |
+| **Tools** | `core/tools.js` | 8 local file/shell tools for all agents |
+| **Terminal UI** | Ink (React for terminal) | Provider badges, status colours, bus monitor |
+| **Message Bus** | Node.js EventEmitter | In-process, no broker needed |
+| **iPhone Bridge** | iOS Shortcuts → HTTP :3333 | Volume button → agent switch |

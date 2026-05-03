@@ -24,6 +24,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Box, useInput, useStdout, useStdin } from 'ink';
 
 import { routePrompt, clearHistory, activeProvider, activeModel, getAgentProviderBadge } from '../core/agent-router.js';
+import { speak, stopSpeaking } from '../core/tts.js';
 import { subscribe, subscribeAll, unsubscribe, publish, readLog, AGENT_NAMES } from '../core/message-bus.js';
 import { readState, setTerminalStatus, switchTerminal, writeState, readVoiceInput, consumeVoiceInput, readVoiceState, writeVoiceState } from '../core/state.js';
 import { getAgentIdByTerminal } from '../core/context-manager.js';
@@ -247,6 +248,9 @@ export default function App() {
     const trimmed  = value.trim();
     setInputValue('');
 
+    // Stop FORGE speaking if the user submits a new prompt mid-response
+    stopSpeaking();
+
     // -- /clear ------------------------------------------------------------
     if (trimmed === '/clear') {
       clearHistory(terminal);
@@ -358,7 +362,7 @@ export default function App() {
     setTerminalStatusState(prev => ({ ...prev, [String(terminal)]: 'working' }));
 
     try {
-      await routePrompt(trimmed, {
+      const fullResponse = await routePrompt(trimmed, {
         terminalIndex: terminal,
         onToken: (chunk) => {
           setConversations(prev => {
@@ -385,6 +389,11 @@ export default function App() {
       await setTerminalStatus(terminal, 'done').catch(() => {});
       setTerminalStatusState(prev => ({ ...prev, [String(terminal)]: 'done' }));
 
+      // Speak the agent's response aloud (markdown is stripped inside speak())
+      if (fullResponse?.trim()) {
+        speak(fullResponse);
+      }
+
     } catch (err) {
       // Replace streaming placeholder with error
       setConversations(prev => {
@@ -400,6 +409,9 @@ export default function App() {
 
       await setTerminalStatus(terminal, 'failed').catch(() => {});
       setTerminalStatusState(prev => ({ ...prev, [String(terminal)]: 'failed' }));
+
+      // Announce the failure aloud
+      speak(`Something went wrong. ${err.message.slice(0, 120)}`, { skipClean: true });
     } finally {
       setIsProcessing(false);
     }

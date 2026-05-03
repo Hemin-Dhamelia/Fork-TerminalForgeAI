@@ -65,15 +65,17 @@ function getProviderForTerminal(terminalIndex) {
 
 debug('global provider=%s ollama_model=%s', PROVIDER, OLLAMA_MODEL);
 
-// ── API clients (only instantiate what's needed) ──────────────────────────
+// ── API clients ───────────────────────────────────────────────────────────
+// Always initialise both clients — per-agent AGENT_N_PROVIDER overrides mean
+// either provider can be needed regardless of the global LLM_PROVIDER setting.
+// Client construction is cheap (no network calls at this point).
 
-const anthropicClient = PROVIDER === 'anthropic'
+const anthropicClient = process.env.ANTHROPIC_API_KEY
   ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
   : null;
 
-const ollamaClient = PROVIDER === 'ollama'
-  ? new OpenAI({ baseURL: `${OLLAMA_URL}/v1`, apiKey: 'ollama' })
-  : null;
+// Ollama client never needs an API key — always create it
+const ollamaClient = new OpenAI({ baseURL: `${OLLAMA_URL}/v1`, apiKey: 'ollama' });
 
 // ── Agent modules ─────────────────────────────────────────────────────────
 
@@ -141,6 +143,9 @@ const OLLAMA_TOOLS = toOllamaTools(TOOL_DEFINITIONS);
 // ── ANTHROPIC streaming + tool use loop ──────────────────────────────────
 
 async function runWithTools_Anthropic(messages, systemPrompt, agent, onToken) {
+  if (!anthropicClient) {
+    throw new Error('ANTHROPIC_API_KEY is not set in .env — cannot use Claude for this agent.');
+  }
   let fullTextResponse = '';
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
@@ -240,6 +245,7 @@ async function runWithTools_Anthropic(messages, systemPrompt, agent, onToken) {
 
 async function runWithTools_Ollama(messages, systemPrompt, onToken) {
   let fullTextResponse = '';
+  const toolsUsed = [];   // track tool names for spoken summary fallback
 
   // Ollama takes system as a message, not a separate param
   const ollamaMessages = [
@@ -322,8 +328,20 @@ async function runWithTools_Ollama(messages, systemPrompt, onToken) {
         tool_call_id: tc.id || `call_${round}`,
         content:      resultStr,
       });
+      toolsUsed.push(tc.name);
       debug('tool %s → %d chars', tc.name, resultStr.length);
     }
+  }
+
+  // Ollama coding models (qwen2.5-coder etc.) often end with tool calls and
+  // produce no final summary text — fullTextResponse stays empty.
+  // Generate a brief spoken-friendly summary so TTS has something to say.
+  if (!fullTextResponse && toolsUsed.length > 0) {
+    const unique = [...new Set(toolsUsed)];
+    const toolList = unique.slice(0, 3).join(', ');
+    fullTextResponse = `Done. I used ${toolList} to complete the task. Check the screen for the full output.`;
+    // Emit it as a final token so it also shows in the TUI
+    onToken(`\n✓ ${fullTextResponse}\n`);
   }
 
   return fullTextResponse;

@@ -1,8 +1,11 @@
 {
   "maxSteps": 20,
   "voiceMode": "push-to-talk",
-  "ttsEnabled": false,
-  "ttsProvider": "macos-say",
+  "ttsEnabled": true,
+  "ttsProvider": "say",
+  "ttsVoice": "Alex",
+  "ttsRate": 185,
+  "ttsMaxChars": 420,
   "debounceMs": 300,
   "contextHandoffCount": 3
 }
