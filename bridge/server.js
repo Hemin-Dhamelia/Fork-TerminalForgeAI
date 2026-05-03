@@ -4,7 +4,7 @@ import { fileURLToPath } from 'url';
 config({ path: resolve(dirname(fileURLToPath(import.meta.url)), '..', '.env'), override: true });
 import express from 'express';
 import createDebug from 'debug';
-import { switchTerminal, toggleMode, readState } from '../core/state.js';
+import { switchTerminal, toggleMode, readState, writeVoiceInput, readVoiceState } from '../core/state.js';
 import { emitVolumeEvent } from '../core/event-listener.js';
 
 const debug = createDebug('tf:bridge');
@@ -72,6 +72,52 @@ app.get('/state', async (_req, res) => {
 
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', service: 'terminalforge-bridge', port: PORT });
+});
+
+// -- Voice endpoints -----------------------------------------------------------
+
+/**
+ * POST /voice
+ * Called by the Python voice pipeline with transcribed text.
+ * Reads activeTerminal from state.json, writes voice_input.json atomically.
+ *
+ * Body: { text: string, confidence?: number }
+ */
+app.post('/voice', async (req, res) => {
+  const { text, confidence } = req.body;
+
+  if (!text || typeof text !== 'string' || !text.trim()) {
+    return res.status(400).json({ error: 'Missing or empty "text" field.' });
+  }
+
+  try {
+    const state = await readState();
+    const envelope = await writeVoiceInput({
+      text:           text.trim(),
+      targetTerminal: state.activeTerminal || 1,
+      confidence:     typeof confidence === 'number' ? confidence : 1.0,
+    });
+
+    debug('voice input received: %j', envelope);
+    return res.json({ status: 'ok', targetTerminal: envelope.targetTerminal });
+  } catch (err) {
+    debug('error handling voice input: %s', err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /voice/state
+ * Returns the current voice pipeline status (idle/recording/transcribing).
+ * Used by the TUI status bar for the live voice indicator.
+ */
+app.get('/voice/state', async (_req, res) => {
+  try {
+    const state = await readVoiceState();
+    return res.json(state);
+  } catch (err) {
+    return res.json({ status: 'idle', mode: 'push-to-talk', recording: false });
+  }
 });
 
 app.listen(PORT, '127.0.0.1', () => {

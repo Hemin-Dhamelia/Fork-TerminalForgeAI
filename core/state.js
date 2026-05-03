@@ -1,4 +1,4 @@
-import { readFile, writeFile, mkdir } from 'fs/promises';
+import { readFile, writeFile, mkdir, rename } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -6,8 +6,11 @@ import createDebug from 'debug';
 
 const debug = createDebug('tf:core');
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const STATE_PATH = join(__dirname, '..', '.terminalforge', 'state.json');
+const __dirname      = dirname(fileURLToPath(import.meta.url));
+const TF_DIR         = join(__dirname, '..', '.terminalforge');
+const STATE_PATH     = join(TF_DIR, 'state.json');
+const VOICE_IN_PATH  = join(TF_DIR, 'voice_input.json');
+const VOICE_ST_PATH  = join(TF_DIR, 'voice_state.json');
 const TOTAL_TERMINALS = 5;
 
 const DEFAULT_STATE = {
@@ -37,15 +40,103 @@ export async function readState() {
 
 export async function writeState(state) {
   try {
-    const dir = dirname(STATE_PATH);
-    if (!existsSync(dir)) {
-      await mkdir(dir, { recursive: true });
+    if (!existsSync(TF_DIR)) {
+      await mkdir(TF_DIR, { recursive: true });
     }
     await writeFile(STATE_PATH, JSON.stringify(state, null, 2), 'utf8');
     debug('state written: activeTerminal=%d mode=%s', state.activeTerminal, state.mode);
   } catch (err) {
     throw new Error(`Failed to write state.json: ${err.message}`);
   }
+}
+
+// -- Atomic write helper -------------------------------------------------------
+async function atomicWrite(filePath, data) {
+  const tmp = filePath + '.tmp';
+  if (!existsSync(TF_DIR)) {
+    await mkdir(TF_DIR, { recursive: true });
+  }
+  await writeFile(tmp, JSON.stringify(data, null, 2), 'utf8');
+  await rename(tmp, filePath);  // atomic on macOS (same filesystem)
+}
+
+// -- Voice input (written by bridge, polled by TUI) ----------------------------
+
+/**
+ * Write a new voice input envelope to voice_input.json.
+ * Called by bridge/server.js POST /voice after receiving transcription from Python.
+ *
+ * @param {{ text: string, targetTerminal: number, confidence: number }} opts
+ * @returns {object} the written envelope
+ */
+export async function writeVoiceInput({ text, targetTerminal = 1, confidence = 1.0 }) {
+  const envelope = {
+    text,
+    targetTerminal,
+    confidence,
+    consumed:  false,
+    timestamp: new Date().toISOString(),
+  };
+  await atomicWrite(VOICE_IN_PATH, envelope);
+  debug('voice input written: terminal=%d text=%s', targetTerminal, text.slice(0, 40));
+  return envelope;
+}
+
+/**
+ * Read the current voice_input.json.
+ * Returns null if the file doesn't exist or cannot be parsed.
+ */
+export async function readVoiceInput() {
+  try {
+    const raw = await readFile(VOICE_IN_PATH, 'utf8');
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Mark the voice input as consumed (TUI calls this after auto-submitting the text).
+ */
+export async function consumeVoiceInput() {
+  try {
+    const existing = await readVoiceInput();
+    if (existing) {
+      await atomicWrite(VOICE_IN_PATH, { ...existing, consumed: true });
+    }
+  } catch {
+    /* non-fatal */
+  }
+}
+
+// -- Voice state (written by Python pipeline / hotkey-fallback, polled by TUI) -
+
+/**
+ * Read the current voice pipeline state from voice_state.json.
+ * Returns default "idle" state if file not found.
+ */
+export async function readVoiceState() {
+  try {
+    const raw = await readFile(VOICE_ST_PATH, 'utf8');
+    return JSON.parse(raw);
+  } catch {
+    return { status: 'idle', mode: 'push-to-talk', recording: false };
+  }
+}
+
+/**
+ * Write voice pipeline state to voice_state.json.
+ * Used by tests and the bridge server — Python and hotkey-fallback.js
+ * write this file directly via their own atomic write logic.
+ */
+export async function writeVoiceState(state) {
+  await atomicWrite(VOICE_ST_PATH, {
+    status:           state.status || 'idle',
+    mode:             state.mode || 'push-to-talk',
+    recording:        state.recording || false,
+    wakeWordDetected: state.wakeWordDetected || false,
+    updatedAt:        new Date().toISOString(),
+  });
 }
 
 export function navigate(direction, currentTerminal) {

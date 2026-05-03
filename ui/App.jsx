@@ -25,7 +25,7 @@ import { Box, useInput, useStdout, useStdin } from 'ink';
 
 import { routePrompt, clearHistory } from '../core/agent-router.js';
 import { subscribe, subscribeAll, unsubscribe, publish, readLog, AGENT_NAMES } from '../core/message-bus.js';
-import { readState, setTerminalStatus, switchTerminal, writeState } from '../core/state.js';
+import { readState, setTerminalStatus, switchTerminal, writeState, readVoiceInput, consumeVoiceInput, readVoiceState } from '../core/state.js';
 import { getAgentIdByTerminal } from '../core/context-manager.js';
 
 import StatusBar      from './StatusBar.jsx';
@@ -61,6 +61,12 @@ export default function App() {
   // -- Bus monitor -----------------------------------------------------------
   const [busMessages, setBusMessages] = useState([]);
 
+  // -- Voice status (reflects Python pipeline state) -------------------------
+  const [voiceStatus, setVoiceStatus] = useState('idle'); // 'idle'|'listening'|'recording'|'transcribing'
+
+  // -- Track last consumed voice input to avoid double-submit ----------------
+  const lastVoiceTimestamp = useRef(null);
+
   // -- Stable refs for use inside callbacks / intervals ---------------------
   const activeRef      = useRef(1);
   const processingRef  = useRef(false);
@@ -85,6 +91,35 @@ export default function App() {
     const iv = setInterval(poll, 1000);
     return () => { mounted = false; clearInterval(iv); };
   }, []);
+
+  // -- Poll voice_input.json every 500ms (faster than state poll for snappy voice UX)
+  useEffect(() => {
+    let mounted = true;
+    const pollVoice = async () => {
+      try {
+        // Poll voice pipeline status for indicator
+        const vs = await readVoiceState();
+        if (mounted) setVoiceStatus(vs.status || 'idle');
+
+        // Check for new transcription to submit
+        const vi = await readVoiceInput();
+        if (!mounted || !vi) return;
+        if (vi.consumed) return;
+        if (lastVoiceTimestamp.current === vi.timestamp) return;
+
+        // New unconsumed voice input — mark consumed first, then submit
+        lastVoiceTimestamp.current = vi.timestamp;
+        await consumeVoiceInput();
+
+        // Auto-submit the transcribed text to the active agent (same as pressing Enter)
+        if (vi.text?.trim() && !processingRef.current) {
+          handleSubmit(vi.text.trim());
+        }
+      } catch { /* non-fatal — voice pipeline may not be running */ }
+    };
+    const iv = setInterval(pollVoice, 500);
+    return () => { mounted = false; clearInterval(iv); };
+  }, [handleSubmit]);
 
   // -- Load historical bus messages from messages.log on mount --------------
   useEffect(() => {
@@ -365,6 +400,7 @@ export default function App() {
         terminalStatus={terminalStatus}
         isProcessing={isProcessing}
         busMessageCount={busMessages.length}
+        voiceStatus={voiceStatus}
         width={totalW}
       />
 

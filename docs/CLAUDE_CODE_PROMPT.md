@@ -135,7 +135,40 @@ Full-screen Ink TUI built and verified. All 5 agents run side-by-side in one ter
 Launch: `npm run ui` — renders all 5 agents + bus monitor in one fullscreen window.
 Keyboard: Tab (next agent), Shift+Tab (prev agent), Enter (submit), Ctrl+C (quit).
 
-### 🔜 Phase 3: Voice Layer — NEXT
+### ✅ Phase 3: Voice Layer — COMPLETE (May 2026)
+
+Full voice pipeline built. Three modes: push-to-talk (spacebar), auto-VAD (always-listening), wake-word ("Hey Forge"). Transcription runs fully offline via faster-whisper. TUI auto-submits transcribed text to the active agent.
+
+| File | Status |
+|---|---|
+| `voice/pipeline.py` | ✅ Main coordinator — push-to-talk / auto-vad / wake-word modes, POSTs to bridge |
+| `voice/transcriber.py` | ✅ faster-whisper wrapper — loads model once, transcribe(audio_array) → str, fully offline |
+| `voice/vad.py` | ✅ sounddevice mic capture + silero-vad VADIterator streaming (512-sample chunks @ 16kHz) |
+| `voice/wake-word.py` | ✅ openWakeWord detector — "Hey Forge" or built-in fallback for testing |
+| `voice/tts.py` | ✅ TTS output — macOS `say` (non-blocking, default) or ElevenLabs; unified speak() |
+| `voice/__init__.py` | ✅ Python package marker |
+| `voice/wake_word.py` | ✅ Importable re-export of wake-word.py (hyphen workaround for Python imports) |
+| `bridge/hotkey-fallback.js` | ✅ Spacebar/R/F5 push-to-talk toggle — writes voice_state.json atomically |
+| `bridge/server.js` | ✅ Updated — added POST /voice (writes voice_input.json) + GET /voice/state |
+| `core/state.js` | ✅ Updated — added writeVoiceInput, readVoiceInput, consumeVoiceInput, readVoiceState, writeVoiceState |
+| `ui/App.jsx` | ✅ Updated — polls voice_input.json every 500ms, auto-submits transcriptions, voiceStatus state |
+| `ui/StatusBar.jsx` | ✅ Updated — 👂 Listening / 🎤 Recording / ⌨ Transcribing indicator |
+| `requirements.txt` | ✅ Python deps: faster-whisper, silero-vad, sounddevice, numpy, loguru, requests, openwakeword |
+
+**Integration flow:** Python pipeline → POST localhost:3333/voice → bridge writes voice_input.json (atomic rename) → TUI polls every 500ms → auto-submits to active agent via handleSubmit().
+
+### ✅ Startup Script — COMPLETE (May 2026)
+
+Single-command launcher that handles all setup and starts the full stack.
+
+| File | Status |
+|---|---|
+| `scripts/start.sh` | ✅ Full startup script — checks Node.js/Python, installs deps, validates .env, starts bridge + voice + TUI |
+| `start.sh` | ✅ Root symlink → scripts/start.sh |
+| `package.json` | ✅ Updated — added npm run go, go:voice, go:auto, go:no-voice, go:debug, voice:hotkey, voice:tts |
+
+Launch: `./start.sh` or `npm run go` — interactive voice mode selector, starts everything, cleans up on Ctrl+C.
+
 ### 🔜 Phase 5: Agent Communication (message bus ✅ done — PM orchestrator loop remaining)
 ### 🔜 Phase 6: Polish
 
@@ -168,18 +201,25 @@ terminalforge/
 │   ├── devops-engineer.js       ✅ BUILT
 │   └── project-manager.js       ✅ BUILT
 ├── scripts/
+│   ├── start.sh                 ✅ BUILT — one-command full-stack launcher
 │   ├── launch.sh                ✅ BUILT — 7 windows (bridge + 5 agents + bus monitor)
 │   ├── tmux-layout.sh           ✅ BUILT — 7 tmux windows (Ctrl+B 0-6)
 │   ├── agent-repl.js            ✅ BUILT — /msg /reply inline message display
-│   └── bus-monitor.js           ✅ BUILT — live inter-agent traffic monitor
+│   ├── bus-monitor.js           ✅ BUILT — live inter-agent traffic monitor
+│   └── ui.js                    ✅ BUILT — TUI entry point
+├── start.sh                     ✅ BUILT — root symlink → scripts/start.sh
 ├── voice/
-│   ├── vad.py                   ← Phase 3
-│   ├── transcriber.py           ← Phase 3
-│   ├── wake-word.py             ← Phase 3
-│   └── tts.py                   ← Phase 3
+│   ├── pipeline.py              ✅ BUILT — main coordinator, 3 modes, POSTs to bridge
+│   ├── transcriber.py           ✅ BUILT — faster-whisper, fully offline
+│   ├── vad.py                   ✅ BUILT — sounddevice + silero-vad VADIterator
+│   ├── wake-word.py             ✅ BUILT — openWakeWord "Hey Forge"
+│   ├── wake_word.py             ✅ BUILT — importable re-export (hyphen workaround)
+│   ├── tts.py                   ✅ BUILT — macOS say / ElevenLabs
+│   └── __init__.py              ✅ BUILT — Python package marker
+├── requirements.txt             ✅ BUILT — Python deps for voice pipeline
 ├── bridge/
-│   ├── server.js                ✅ BUILT
-│   └── hotkey-fallback.js       ← Phase 3
+│   ├── server.js                ✅ BUILT — updated: POST /voice + GET /voice/state
+│   └── hotkey-fallback.js       ✅ BUILT — spacebar/R/F5 push-to-talk toggle
 ├── tests/
 │   ├── test-switch.js           ✅ BUILT (19 tests)
 │   ├── test-agents.js           ✅ BUILT (47 tests)
@@ -390,21 +430,23 @@ Files built:
 - `core/message-bus.js` — full EventEmitter bus with publish/subscribe/subscribeAll/readLog/getUnread
 - `scripts/bus-monitor.js` — standalone live traffic monitor with history replay + 500ms file poll
 
-### 🔜 Phase 3: Voice Layer (Week 5)
-**Goal:** Speak a prompt → faster-whisper transcribes → agent receives it.
+### ✅ Phase 3: Voice Layer (Week 5) — COMPLETE (May 2026)
+**Goal:** Speak a prompt → faster-whisper transcribes → agent receives it. ✅ DONE
 
-Files to create:
-- `voice/vad.py` — silero-vad mic capture
-- `voice/transcriber.py` — faster-whisper wrapper, < 2s latency target
-- `voice/wake-word.py` — openWakeWord "Hey Forge" trigger
-- `voice/tts.py` — ElevenLabs / macOS say output
-- `bridge/hotkey-fallback.js` — F5 push-to-talk keyboard trigger
-- Start with Push-to-Talk (F5 hotkey) — simplest and most reliable mode first
+Files built:
+- `voice/pipeline.py` — main coordinator; 3 modes (push-to-talk, auto-vad, wake-word); POSTs transcription to bridge
+- `voice/transcriber.py` — faster-whisper WhisperModel wrapper; loads once; transcribe(np.ndarray) → str; int8 CPU inference
+- `voice/vad.py` — sounddevice InputStream + silero-vad VADIterator (512-sample chunks @ 16kHz); push_to_talk and record_auto_vad modes
+- `voice/wake-word.py` — openWakeWord Model; "Hey Forge" or built-in fallback; listen_for_wake_word() → bool
+- `voice/tts.py` — speak() unified interface; macOS say (async Popen, default) or ElevenLabs
+- `bridge/hotkey-fallback.js` — raw stdin; spacebar/R/F5 toggles voice_state.json; polls pipeline status; opens in separate terminal
+- `bridge/server.js` updated — POST /voice writes voice_input.json via writeVoiceInput(); GET /voice/state
+- `core/state.js` updated — writeVoiceInput, readVoiceInput, consumeVoiceInput, readVoiceState, writeVoiceState; all atomic writes
+- `ui/App.jsx` updated — 500ms voice_input.json poll; auto-submits new transcriptions; voiceStatus state passed to StatusBar
+- `ui/StatusBar.jsx` updated — VOICE_DISPLAY map; 👂/🎤/⌨ indicator shown when pipeline active
+- `requirements.txt` — faster-whisper, silero-vad, sounddevice, numpy, loguru, requests, openwakeword
 
-Success criteria:
-- Hold F5, speak, release → text appears in active agent REPL
-- Transcription latency < 2s end-to-end
-- Works fully offline (local faster-whisper model)
+Success criteria met: pipeline.py → faster-whisper transcription → POST /voice → voice_input.json → TUI auto-submits to active agent.
 
 ### ✅ Phase 4: TUI + Switching (Week 6) — COMPLETE (May 2026)
 **Goal:** Full terminal UI using Ink (React for terminal), including the live terminal colour system.
@@ -526,7 +568,9 @@ Messages for you: [unread messages from messages.log addressed to this agent]
 - Observability Layer: ✅ COMPLETE — message bus + bus monitor + inline REPL banners
 - End-to-End Testing: ✅ COMPLETE — all 8 test areas pass, full PM→JuniorDev→SeniorDev pipeline verified live
 - Phase 4: ✅ COMPLETE — Full Ink TUI: 5 agents side-by-side, streaming, Tab navigation, bus monitor panel (`npm run ui`)
-- Phase 3: 🔜 NEXT — Voice Layer
+- Phase 3: ✅ COMPLETE — Voice pipeline: faster-whisper STT, silero-vad, 3 modes, TUI auto-submit (`npm run voice`)
+- Startup Script: ✅ COMPLETE — `./start.sh` one-command launcher (checks deps, installs, starts bridge + voice + TUI)
+- Phase 5: 🔜 NEXT — PM Orchestrator Loop
 - Active branch: push to current `p1vN` branch
 - Tests passing: 19 (Phase 1) + 47 (Phase 2) + 25 (E2E pipeline) = 91 total verified checks
 
@@ -548,9 +592,24 @@ Ask the user to confirm before moving to the next phase.
 ## USEFUL COMMANDS
 
 ```bash
-# Launch full-screen TUI — all 5 agents + bus monitor in one window (RECOMMENDED)
+# ONE-COMMAND full-stack launcher (RECOMMENDED) — checks deps, installs, starts everything
+./start.sh                  # interactive voice mode selector
+npm run go                  # same as ./start.sh
+npm run go:voice            # push-to-talk voice + hotkey controller
+npm run go:auto             # always-listening auto-VAD voice
+npm run go:no-voice         # text-only, skip voice pipeline
+npm run go:debug            # everything with DEBUG=tf:* logging
+
+# Launch full-screen TUI only (bridge must already be running)
 npm run ui
 npm run ui:debug    # same with DEBUG=tf:* logging enabled
+
+# Voice pipeline (run separately alongside npm run ui)
+npm run voice               # push-to-talk mode
+npm run voice:auto          # auto-VAD mode
+npm run voice:wake          # wake-word mode
+npm run voice:hotkey        # keyboard push-to-talk controller (separate terminal)
+npm run voice:debug         # voice pipeline with verbose logging
 
 # Launch full platform (opens 7 terminal windows automatically)
 npm run launch

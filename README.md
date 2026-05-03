@@ -41,7 +41,13 @@ cp .env.example .env
 ### 3. Launch everything
 
 ```bash
-npm run ui            # Full-screen TUI — all 5 agents in one window (RECOMMENDED)
+./start.sh            # ONE COMMAND — installs deps, starts bridge + voice + TUI (RECOMMENDED)
+npm run go            # Same as ./start.sh
+npm run go:voice      # Start with push-to-talk voice enabled
+npm run go:auto       # Start with always-listening voice (auto-VAD)
+npm run go:no-voice   # Skip voice pipeline, text-only
+
+npm run ui            # TUI only (bridge must already be running)
 npm run launch        # Opens 7 separate windows in iTerm2 or Terminal.app
 npm run launch:tmux   # Opens 7 tmux windows (Ctrl+B 0-6 to switch)
 ```
@@ -96,6 +102,34 @@ curl -X POST http://localhost:3333/volume -H "Content-Type: application/json" -d
 curl -X POST http://localhost:3333/volume -H "Content-Type: application/json" -d '{"button":"up"}'
 curl -X POST http://localhost:3333/volume -H "Content-Type: application/json" -d '{"button":"hold"}'
 ```
+
+---
+
+## Voice Input — Phase 3
+
+The voice pipeline transcribes your speech locally using faster-whisper (no network, no cost) and routes it to the active agent automatically.
+
+**Install Python deps first:**
+```bash
+pip install -r requirements.txt
+```
+
+**Three voice modes:**
+
+| Mode | Command | How it works |
+|---|---|---|
+| Push-to-talk | `npm run voice` + `npm run voice:hotkey` | Press SPACE to start/stop recording |
+| Auto-VAD | `npm run voice:auto` | Always listening — 1.5s pause sends the prompt |
+| Wake word | `npm run voice:wake` | Say "Hey Forge" to activate |
+
+**Or use the all-in-one startup script:**
+```bash
+./start.sh --voice        # push-to-talk
+./start.sh --voice=auto   # auto-VAD
+./start.sh --voice=wake   # wake word
+```
+
+The TUI status bar shows a live voice indicator: 👂 Listening · 🎤 Recording · ⌨ Transcribing
 
 ---
 
@@ -196,12 +230,15 @@ The full pipeline ran live against the Claude API in a single test:
 │   ├── devops-engineer.js  T4 — system prompt, tools, identity
 │   └── project-manager.js  T5 — system prompt, orchestrator config
 ├── bridge/
-│   └── server.js           Express server :3333 — receives volume button events
-├── voice/                  (Phase 3 — not yet built)
-│   ├── vad.py              silero-vad mic capture
-│   ├── transcriber.py      faster-whisper wrapper
-│   ├── wake-word.py        "Hey Forge" wake word
-│   └── tts.py              TTS output
+│   ├── server.js           Express server :3333 — volume events + POST /voice endpoint
+│   └── hotkey-fallback.js  Push-to-talk keyboard controller (spacebar toggle)
+├── voice/                  ✅ BUILT — Phase 3 voice pipeline
+│   ├── pipeline.py         Main coordinator — push-to-talk / auto-VAD / wake-word modes
+│   ├── transcriber.py      faster-whisper wrapper — local offline STT, < 2s latency
+│   ├── vad.py              silero-vad mic capture + speech detection
+│   ├── wake-word.py        "Hey Forge" wake word via openWakeWord
+│   └── tts.py              TTS output — macOS say (default) or ElevenLabs
+├── requirements.txt        Python dependencies for voice pipeline
 ├── ui/                     ✅ BUILT — Phase 4 TUI (all 5 agents in one fullscreen window)
 │   ├── App.jsx             Root Ink component — layout, state management, streaming
 │   ├── AgentPane.jsx       Per-agent pane: active (input + streaming) / inactive (compact)
@@ -209,11 +246,13 @@ The full pipeline ran live against the Claude API in a single test:
 │   ├── BusMonitorPanel.jsx Right-column live inter-agent message feed
 │   └── TerminalColorManager.jsx  Agent info, status → colour/label/dot mappings
 ├── scripts/
+│   ├── start.sh            ONE-COMMAND launcher — checks deps, installs, starts everything
 │   ├── agent-repl.js       Interactive per-agent REPL with /msg and /reply
 │   ├── bus-monitor.js      Live inter-agent traffic monitor
 │   ├── ui.js               TUI entry point — loads .env, renders App, cursor hide/restore
 │   ├── launch.sh           Opens 7 terminal windows (iTerm2 or Terminal.app)
 │   └── tmux-layout.sh      tmux 7-window layout
+├── start.sh                Symlink → scripts/start.sh (run from project root)
 ├── tests/
 │   ├── test-switch.js      Phase 1 tests (19)
 │   ├── test-agents.js      Phase 2 tests (47)
@@ -221,6 +260,8 @@ The full pipeline ran live against the Claude API in a single test:
 └── .terminalforge/         Runtime state (git-ignored)
     ├── state.json          Active terminal + mode + terminalStatus per agent
     ├── messages.log        Agent-to-agent message log (newline-delimited JSON)
+    ├── voice_state.json    Voice pipeline status (idle/recording/transcribing)
+    ├── voice_input.json    Latest transcription — TUI polls and auto-submits
     ├── project.md          Current project description
     ├── open_tasks.json     Task list
     └── handoffs.md         Cross-agent handoff notes
@@ -235,7 +276,7 @@ The full pipeline ran live against the Claude API in a single test:
 | Phase 1 | Foundation — bridge, state, event listener | ✅ Complete |
 | Phase 2 | Agent Engine — 5 Claude sessions, context, git | ✅ Complete |
 | Bonus | Launcher scripts + observability layer | ✅ Complete |
-| Phase 3 | Voice Layer — faster-whisper, silero-vad, push-to-talk | 🔜 Next |
+| Phase 3 | Voice Layer — faster-whisper, silero-vad, push-to-talk | ✅ Complete |
 | Phase 4 | TUI — Ink components, terminal colour system | ✅ Complete |
 | Phase 5 | Agent Comms — PM orchestrator loop (bus core ✅ done) | 🔜 |
 | Phase 6 | Polish — error handling, QUICKSTART.md, demo | 🔜 |
@@ -246,9 +287,9 @@ The full pipeline ran live against the Claude API in a single test:
 
 - **AI:** Anthropic Claude API (`claude-sonnet-4-5`), always streaming
 - **Runtime:** Node.js 18+ (core) · Python 3.11+ (voice)
-- **Voice STT:** faster-whisper (local, offline)
-- **Voice Activity:** silero-vad
-- **Wake Word:** openWakeWord ("Hey Forge")
+- **Voice STT:** faster-whisper (local, offline) — ✅ Built (`npm run voice`)
+- **Voice Activity:** silero-vad — ✅ Built
+- **Wake Word:** openWakeWord ("Hey Forge") — ✅ Built (`npm run voice:wake`)
 - **Terminal UI:** Ink (React for terminal) — ✅ Built (`npm run ui`)
 - **Message Bus:** Node.js EventEmitter (in-process, no broker)
 - **iPhone Bridge:** iOS Shortcuts → HTTP POST → localhost:3333
