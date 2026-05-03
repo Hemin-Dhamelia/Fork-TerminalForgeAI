@@ -25,7 +25,7 @@
 #   10. Cleans up all background processes on exit
 # =============================================================================
 
-set -euo pipefail
+set -uo pipefail
 
 # -- Resolve project root regardless of where script is called from -----------
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -198,8 +198,12 @@ fi
 
 if $NEEDS_INSTALL; then
   echo -e "  ${YELLOW}→${NC}  Running npm install..."
-  npm install --prefix "$DIR" --silent 2>&1 | sed 's/^/      /'
-  ok "npm install complete"
+  if npm install --prefix "$DIR" 2>&1 | sed 's/^/      /'; then
+    ok "npm install complete"
+  else
+    fail "npm install failed — check the output above"
+    exit 1
+  fi
 else
   ok "Node.js dependencies up to date"
 fi
@@ -225,11 +229,12 @@ if [ "$VOICE_MODE" != "none" ] && [ -n "$PYTHON" ]; then
     echo -e "  ${YELLOW}→${NC}  Running: pip install -r requirements.txt"
     echo ""
     "$PYTHON" -m pip install -r "$DIR/requirements.txt" 2>&1 | \
-      grep -E "^(Collecting|Installing|Successfully|Requirement already)" | \
+      grep -E "^(Collecting|Installing|Successfully|Requirement already|ERROR|error)" | \
       sed 's/^/      /' || {
         warn "pip install encountered errors. Voice pipeline may not work."
         info "Try manually: pip install -r requirements.txt"
       }
+    true  # don't let grep's exit code kill the script
     echo ""
     ok "Python dependencies installed"
   else
