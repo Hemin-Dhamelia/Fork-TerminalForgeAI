@@ -390,6 +390,21 @@ Built in Phase 4 (TUI). Wired to message bus events in Phase 5.
 - `scripts/agent-repl.js` updated — incoming messages displayed inline with colour-coded banners
 - All message flow tests passing: targeted delivery, subscribeAll fan-out, log persistence, validation
 
+### ✅ Phase 4: TUI — COMPLETE (May 2026)
+- `ui/App.jsx` — root Ink component, full layout, state management, keyboard nav
+- `ui/AgentPane.jsx` — per-agent pane: active (streaming + input) / inactive (compact)
+- `ui/StatusBar.jsx` — top bar: active agent, mode, mini status dots, key hints
+- `ui/BusMonitorPanel.jsx` — right column live message feed, all 6 message types
+- `ui/TerminalColorManager.jsx` — status -> colour/label/dot mappings
+- `scripts/ui.js` — entry point, cursor hide/restore, SIGINT cleanup
+- Launch: `npm run ui` — single fullscreen window, all 5 agents + bus monitor
+- Keys: Tab = next agent, Shift+Tab = previous, Enter = submit, Ctrl+C = quit
+- Active pane: double border + wider + input box + full streaming output
+- Inactive panes: compact, single border, last N lines + status colour badge
+- Status colours live: yellow = working, green = done, red = failed, grey = idle
+- All panes connected via existing message bus (subscribeAll + per-agent subscribe)
+- Bridge server vol-button switches sync via 1s state.json poll
+
 ### ✅ End-to-End Testing — COMPLETE (May 2026)
 Full live test suite run against the real stack and real Claude API. All 8 test areas verified:
 
@@ -438,6 +453,10 @@ Error handling, retry logic, `docs/QUICKSTART.md`, end-to-end demo
 ## Useful Commands
 
 ```bash
+# Launch full-screen TUI (all 5 agents + bus monitor in ONE window) -- RECOMMENDED
+npm run ui
+npm run ui:debug   # same with debug logging
+
 # Launch all 5 agents + bridge server + bus monitor (opens 7 windows automatically)
 npm run launch
 

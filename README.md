@@ -41,7 +41,8 @@ cp .env.example .env
 ### 3. Launch everything
 
 ```bash
-npm run launch        # Opens 7 windows in iTerm2 or Terminal.app
+npm run ui            # Full-screen TUI — all 5 agents in one window (RECOMMENDED)
+npm run launch        # Opens 7 separate windows in iTerm2 or Terminal.app
 npm run launch:tmux   # Opens 7 tmux windows (Ctrl+B 0-6 to switch)
 ```
 
@@ -98,14 +99,38 @@ curl -X POST http://localhost:3333/volume -H "Content-Type: application/json" -d
 
 ---
 
+## TUI — All Agents in One Window
+
+```bash
+npm run ui             # Launch full-screen TUI (all 5 agents + bus monitor)
+npm run ui:debug       # Same with debug logging enabled
+```
+
+**TUI keyboard controls:**
+```
+Tab           → next agent (T1 → T2 → T3 → T4 → T5 → T1)
+Shift+Tab     → previous agent (T1 → T5 → T4 → T3 → T2 → T1)
+Enter         → submit prompt to active agent
+Ctrl+C        → quit
+```
+
+**TUI layout:**
+```
++-----+------------------------+-------+-------+-------+----------+
+| T1  |    T2 (ACTIVE)         |  T3   |  T4   |  T5   | 📡 Bus   |
+| 👨‍💻  | streaming output...    |  🔍   |  ⚙️    |  📋   | Monitor  |
+|     | [T2] > your prompt     |       |       |       |          |
++-----+------------------------+-------+-------+-------+----------+
+```
+
 ## Individual Commands
 
 ```bash
-npm run agent 1        # Open Junior Developer REPL
-npm run agent 2        # Open Senior Developer REPL
-npm run agent 3        # Open QA Engineer REPL
-npm run agent 4        # Open DevOps Engineer REPL
-npm run agent 5        # Open Project Manager REPL
+npm run agent 1        # Open Junior Developer REPL (standalone)
+npm run agent 2        # Open Senior Developer REPL (standalone)
+npm run agent 3        # Open QA Engineer REPL (standalone)
+npm run agent 4        # Open DevOps Engineer REPL (standalone)
+npm run agent 5        # Open Project Manager REPL (standalone)
 
 npm run monitor        # Open Bus Monitor standalone
 
