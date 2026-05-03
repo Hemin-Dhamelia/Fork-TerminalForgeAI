@@ -23,6 +23,13 @@ config({
   override: true,
 });
 
+// Must be run in a real terminal (Ink requires raw mode / TTY)
+if (!process.stdin.isTTY) {
+  console.error('\n  ❌  TerminalForge must be run in an interactive terminal.\n');
+  console.error('      Run:  npm run ui   (or ./start.sh)\n');
+  process.exit(1);
+}
+
 // Validate API key before doing anything
 if (!process.env.ANTHROPIC_API_KEY || !process.env.ANTHROPIC_API_KEY.startsWith('sk-')) {
   console.error('\n  ❌  ANTHROPIC_API_KEY missing or invalid in .env\n');

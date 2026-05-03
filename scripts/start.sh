@@ -28,7 +28,14 @@
 set -uo pipefail
 
 # -- Resolve project root regardless of where script is called from -----------
-DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Resolve symlinks so ./start.sh (symlink) and scripts/start.sh both work
+SCRIPT_PATH="${BASH_SOURCE[0]}"
+while [ -L "$SCRIPT_PATH" ]; do
+  SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
+  SCRIPT_PATH="$(readlink "$SCRIPT_PATH")"
+  [[ "$SCRIPT_PATH" != /* ]] && SCRIPT_PATH="$SCRIPT_DIR/$SCRIPT_PATH"
+done
+DIR="$(cd "$(dirname "$SCRIPT_PATH")/.." && pwd)"
 cd "$DIR"
 
 # -- Colours ------------------------------------------------------------------
@@ -46,19 +53,28 @@ NC='\033[0m'   # reset
 BRIDGE_PID=""
 VOICE_PID=""
 HOTKEY_PID=""
+LAUNCHED=false   # set to true once bridge is confirmed running
 
 cleanup() {
-  echo ""
-  echo -e "${DIM}  Shutting down TerminalForge...${NC}"
-  [ -n "$BRIDGE_PID" ] && kill "$BRIDGE_PID" 2>/dev/null && echo -e "${DIM}  Stopped bridge server (pid $BRIDGE_PID)${NC}"
-  [ -n "$VOICE_PID"  ] && kill "$VOICE_PID"  2>/dev/null && echo -e "${DIM}  Stopped voice pipeline (pid $VOICE_PID)${NC}"
-  [ -n "$HOTKEY_PID" ] && kill "$HOTKEY_PID" 2>/dev/null && echo -e "${DIM}  Stopped hotkey controller (pid $HOTKEY_PID)${NC}"
-  # Reset voice state to idle
-  if [ -d "$DIR/.terminalforge" ]; then
-    printf '{"status":"idle","mode":"push-to-talk","recording":false,"updatedAt":"%s"}' \
-      "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$DIR/.terminalforge/voice_state.json" 2>/dev/null || true
+  # Only print shutdown banner if we actually started services
+  if $LAUNCHED; then
+    echo ""
+    echo -e "${DIM}  Shutting down TerminalForge...${NC}"
+    [ -n "$BRIDGE_PID" ] && kill "$BRIDGE_PID" 2>/dev/null && echo -e "${DIM}  Stopped bridge server (pid $BRIDGE_PID)${NC}"
+    [ -n "$VOICE_PID"  ] && kill "$VOICE_PID"  2>/dev/null && echo -e "${DIM}  Stopped voice pipeline (pid $VOICE_PID)${NC}"
+    [ -n "$HOTKEY_PID" ] && kill "$HOTKEY_PID" 2>/dev/null && echo -e "${DIM}  Stopped hotkey controller (pid $HOTKEY_PID)${NC}"
+    # Reset voice state to idle
+    if [ -d "$DIR/.terminalforge" ]; then
+      printf '{"status":"idle","mode":"push-to-talk","recording":false,"updatedAt":"%s"}' \
+        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$DIR/.terminalforge/voice_state.json" 2>/dev/null || true
+    fi
+    echo -e "${CYAN}  TerminalForge stopped.${NC}"
+  else
+    # Silent cleanup — kill any stray PIDs without banner
+    [ -n "$BRIDGE_PID" ] && kill "$BRIDGE_PID" 2>/dev/null || true
+    [ -n "$VOICE_PID"  ] && kill "$VOICE_PID"  2>/dev/null || true
+    [ -n "$HOTKEY_PID" ] && kill "$HOTKEY_PID" 2>/dev/null || true
   fi
-  echo -e "${CYAN}  TerminalForge stopped.${NC}"
   exit 0
 }
 trap cleanup SIGINT SIGTERM EXIT
@@ -198,7 +214,7 @@ fi
 
 if $NEEDS_INSTALL; then
   echo -e "  ${YELLOW}→${NC}  Running npm install..."
-  if npm install --prefix "$DIR" 2>&1 | sed 's/^/      /'; then
+  if npm install 2>&1 | sed 's/^/      /'; then
     ok "npm install complete"
   else
     fail "npm install failed — check the output above"
@@ -387,6 +403,7 @@ done
 
 if $READY; then
   ok "Bridge server running  (pid $BRIDGE_PID, port 3333)"
+  LAUNCHED=true   # services are up — cleanup will now print the shutdown banner
 else
   fail "Bridge server failed to start. Check .terminalforge/bridge.log"
   cat "$DIR/.terminalforge/bridge.log" 2>/dev/null | tail -10 | sed 's/^/      /'
@@ -404,15 +421,25 @@ if [ "$VOICE_MODE" != "none" ] && [ "$VOICE_MODE" != "" ] && [ -n "$PYTHON" ]; t
     *)    PIPELINE_MODE_ARG="push-to-talk" ;;
   esac
 
+  # -u = unbuffered so logs flush immediately to voice.log
+  # -m = run as module so `from voice.X import Y` resolves from project root
   if $DEBUG_MODE; then
-    "$PYTHON" "$DIR/voice/pipeline.py" --mode "$PIPELINE_MODE_ARG" --debug \
+    cd "$DIR" && "$PYTHON" -u -m voice.pipeline --mode "$PIPELINE_MODE_ARG" --debug \
       > "$DIR/.terminalforge/voice.log" 2>&1 &
   else
-    "$PYTHON" "$DIR/voice/pipeline.py" --mode "$PIPELINE_MODE_ARG" \
+    cd "$DIR" && "$PYTHON" -u -m voice.pipeline --mode "$PIPELINE_MODE_ARG" \
       > "$DIR/.terminalforge/voice.log" 2>&1 &
   fi
   VOICE_PID=$!
-  sleep 1.0
+
+  # Wait for model to load (up to 8s — base.en takes ~3s from cache)
+  info "Loading Whisper model (base.en, first call may take 3-5s)..."
+  for _i in $(seq 1 8); do
+    sleep 1
+    if ! kill -0 "$VOICE_PID" 2>/dev/null; then break; fi
+    if grep -q "Push-to-talk mode ready\|Auto-VAD mode ready\|Wake-word mode" \
+        "$DIR/.terminalforge/voice.log" 2>/dev/null; then break; fi
+  done
 
   if kill -0 "$VOICE_PID" 2>/dev/null; then
     ok "Voice pipeline running  (pid $VOICE_PID, mode: $PIPELINE_MODE_ARG)"
@@ -423,35 +450,10 @@ if [ "$VOICE_MODE" != "none" ] && [ "$VOICE_MODE" != "" ] && [ -n "$PYTHON" ]; t
     VOICE_PID=""
   fi
 
-  # Start hotkey controller for push-to-talk in a new terminal window
+  # Push-to-talk hotkey is now built into the TUI (Space key)
+  # No separate hotkey window is needed anymore.
   if $START_HOTKEY && [ -n "$VOICE_PID" ]; then
-    echo -e "  ${CYAN}→${NC}  Starting hotkey controller..."
-    if [ -d "/Applications/iTerm.app" ]; then
-      osascript <<APPLESCRIPT 2>/dev/null || true
-tell application "iTerm2"
-  activate
-  tell current window
-    set newTab to (create tab with default profile)
-    tell newTab
-      tell current session
-        set name to "🎤 Voice Hotkey"
-        write text "cd '$DIR' && node bridge/hotkey-fallback.js"
-      end tell
-    end tell
-  end tell
-end tell
-APPLESCRIPT
-      ok "Hotkey controller opened in new iTerm2 tab"
-    else
-      osascript <<APPLESCRIPT 2>/dev/null || true
-tell application "Terminal"
-  do script "cd '$DIR' && echo '🎤 TerminalForge — Voice Hotkey Controller' && node bridge/hotkey-fallback.js"
-  set the custom title of front window to "🎤 Voice Hotkey"
-end tell
-APPLESCRIPT
-      ok "Hotkey controller opened in new Terminal.app window"
-    fi
-    info "Press SPACE to toggle recording in the hotkey window"
+    ok "Push-to-talk ready — press Space inside the TUI to toggle recording"
   fi
 fi
 
@@ -470,7 +472,7 @@ echo -e "  ${DIM}  Tab / Shift+Tab   — switch between agents${NC}"
 echo -e "  ${DIM}  Enter             — submit prompt to active agent${NC}"
 echo -e "  ${DIM}  Ctrl+C            — quit everything${NC}"
 [ "$VOICE_MODE" = "push-to-talk" ] && [ -n "$VOICE_PID" ] && \
-  echo -e "  ${DIM}  Spacebar          — toggle recording (in hotkey window)${NC}"
+  echo -e "  ${DIM}  Space             — toggle recording (press when input is empty)${NC}"
 [ "$VOICE_MODE" = "auto" ] && [ -n "$VOICE_PID" ] && \
   echo -e "  ${DIM}  Speak naturally   — 1.5s pause sends to active agent${NC}"
 echo ""

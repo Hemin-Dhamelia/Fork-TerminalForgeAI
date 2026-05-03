@@ -14,20 +14,63 @@ const MSG_TYPE_ICONS = {
   'bug-report': '🐛', handoff: '🤝', summary: '📊',
 };
 
-// -- Render a single conversation entry ---------------------------------------
+// -- Estimate physical lines a message takes given available column width -------
+// This is approximate (assumes Ink wraps at innerW) but good enough for scrolling.
+function estimateLines(msg, innerW) {
+  const wrapCount = (text) => Math.max(1, Math.ceil((text || ' ').length / Math.max(1, innerW)));
+
+  if (msg.role === 'user') {
+    return wrapCount(`> ${msg.text}`);
+  }
+  if (msg.role === 'assistant') {
+    const raw = msg.text || '';
+    const lines = raw.split('\n');
+    const total = lines.reduce((sum, l) => sum + wrapCount(l), 0);
+    return total + (msg.streaming ? 1 : 0);
+  }
+  if (msg.role === 'notification') {
+    return 4; // divider + from+type + text + divider
+  }
+  if (msg.role === 'system') {
+    return wrapCount(msg.text || '');
+  }
+  return 1;
+}
+
+// -- Pick the tail of conversation that fits in maxLines physical rows ----------
+// Always shows the NEWEST content (scrolled to bottom automatically).
+function getVisibleEntries(conversation, maxLines, innerW) {
+  if (!conversation.length) return [];
+  let budget = maxLines;
+  let startIdx = conversation.length;
+
+  for (let i = conversation.length - 1; i >= 0; i--) {
+    const needed = estimateLines(conversation[i], innerW);
+    if (budget - needed < 0 && startIdx < conversation.length) {
+      // This entry won't fully fit AND we already have newer content — stop here
+      break;
+    }
+    budget  -= needed;
+    startIdx = i;
+    if (budget <= 0) break;
+  }
+
+  return conversation.slice(startIdx);
+}
+
+// -- Render a single conversation entry ----------------------------------------
 
 function ConvLine({ msg, isActive, innerW }) {
   if (msg.role === 'user') {
     return (
       <Text color="cyan" bold wrap={isActive ? 'wrap' : 'truncate'}>
-        > {msg.text}
+        &gt; {msg.text}
       </Text>
     );
   }
 
   if (msg.role === 'assistant') {
-    // Split multi-line responses; each rendered as its own Text
-    const lines = msg.text.split('\n');
+    const lines = (msg.text || '').split('\n');
     return (
       <>
         {lines.map((line, i) => (
@@ -40,9 +83,7 @@ function ConvLine({ msg, isActive, innerW }) {
             {line || ' '}
           </Text>
         ))}
-        {msg.streaming && (
-          <Text color="cyan">|</Text>
-        )}
+        {msg.streaming && <Text color="cyan">▌</Text>}
       </>
     );
   }
@@ -64,11 +105,11 @@ function ConvLine({ msg, isActive, innerW }) {
   }
 
   if (msg.role === 'system') {
+    const color = msg.text.startsWith('v') ? 'green'
+                : msg.text.startsWith('x') ? 'red'
+                : 'white';
     return (
-      <Text
-        color={msg.text.startsWith('v') ? 'green' : 'red'}
-        wrap="truncate"
-      >
+      <Text color={color} wrap={isActive ? 'wrap' : 'truncate'}>
         {msg.text}
       </Text>
     );
@@ -77,7 +118,7 @@ function ConvLine({ msg, isActive, innerW }) {
   return null;
 }
 
-// -- Main AgentPane component --------------------------------------------------
+// -- Main AgentPane component ---------------------------------------------------
 
 export default function AgentPane({
   terminalIndex,
@@ -88,21 +129,21 @@ export default function AgentPane({
   onInputChange,
   onSubmit,
   isProcessing,
+  voiceStatus,
   width,
   height,
 }) {
   const agent       = getAgentInfo(terminalIndex);
   const statusStyle = getStatusStyle(status);
-  const innerW      = Math.max(4, width - 2); // inside border
+  const innerW      = Math.max(4, width - 4); // inside border + padding
 
   // Layout heights
-  const HEADER_H = 2;   // badge + divider
-  const INPUT_H  = isActive ? 3 : 0;  // input box + divider
-  const CONTENT_H = Math.max(1, height - HEADER_H - INPUT_H - 2); // -2 for border
+  const HEADER_H  = 2;                                          // badge + divider
+  const INPUT_H   = isActive ? 2 : 0;                          // divider + input row
+  const BORDER_H  = 2;                                          // top + bottom border
+  const CONTENT_H = Math.max(2, height - HEADER_H - INPUT_H - BORDER_H);
 
-  // How many recent conversation entries to show
-  // Active pane: show all (scrolled to bottom via slicing)
-  // Inactive pane: show last 6 lines worth
+  // Max inactive flat lines
   const MAX_LINES_INACTIVE = 8;
 
   // Flatten conversation into display lines for inactive panes
@@ -111,14 +152,19 @@ export default function AgentPane({
     if (msg.role === 'user') {
       flatLines.push({ type: 'user', text: `> ${msg.text}` });
     } else if (msg.role === 'assistant') {
-      msg.text.split('\n').forEach(l => flatLines.push({ type: 'assistant', text: l || ' ' }));
-      if (msg.streaming) flatLines.push({ type: 'cursor', text: '|' });
+      (msg.text || '').split('\n').forEach(l => flatLines.push({ type: 'assistant', text: l || ' ' }));
+      if (msg.streaming) flatLines.push({ type: 'cursor', text: '▌' });
     } else if (msg.role === 'notification') {
-      flatLines.push({ type: 'notif', text: `${MSG_TYPE_ICONS[msg.type] || '📨'} ${msg.from}: ${msg.text.slice(0, 30)}...` });
+      flatLines.push({ type: 'notif', text: `${MSG_TYPE_ICONS[msg.type] || '📨'} ${msg.from}: ${(msg.text || '').slice(0, 30)}...` });
     } else if (msg.role === 'system') {
       flatLines.push({ type: 'system', text: msg.text });
     }
   }
+
+  // Active pane: pick the tail of conversation that physically fits
+  const visibleEntries = isActive
+    ? getVisibleEntries(conversation, CONTENT_H, innerW)
+    : [];
 
   return (
     <Box
@@ -137,9 +183,14 @@ export default function AgentPane({
           color={isActive ? agent.colour : (statusStyle.bgColor ? statusStyle.color : 'gray')}
           wrap="truncate"
         >
-          {agent.emoji} T{terminalIndex} {isActive ? agent.name : `T${terminalIndex}`}
+          {isActive
+            ? `${agent.emoji} T${terminalIndex} ${agent.name}`
+            : `${agent.emoji} ${agent.name}`}
         </Text>
-        <Text color={statusStyle.bgColor ? statusStyle.color : 'gray'} dimColor={status === 'idle'}>
+        <Text
+          color={statusStyle.bgColor ? statusStyle.color : 'gray'}
+          dimColor={status === 'idle'}
+        >
           {' '}{statusStyle.dot}{isActive ? ` ${statusStyle.label}` : ''}
         </Text>
       </Box>
@@ -159,27 +210,56 @@ export default function AgentPane({
         flexShrink={0}
       >
         {isActive ? (
-          // Active: render full conversation entries (last CONTENT_H messages)
-          conversation.slice(-CONTENT_H).map((msg, i) => (
-            <ConvLine key={i} msg={msg} isActive={true} innerW={innerW} />
-          ))
+          // Voice overlays take priority
+          voiceStatus === 'recording' ? (
+            <Box flexDirection="column" paddingX={1} paddingY={1}>
+              <Text color="red" bold>🎤  Say something...</Text>
+              <Text> </Text>
+              <Text color="gray" dimColor>Press Space again to stop</Text>
+              <Text color="gray" dimColor>(auto-vad: pause 1.5s to send)</Text>
+            </Box>
+          ) : voiceStatus === 'transcribing' ? (
+            <Box flexDirection="column" paddingX={1} paddingY={1}>
+              <Text color="magenta" bold>⌨   Transcribing...</Text>
+              <Text color="gray" dimColor>Sending to {agent.name}</Text>
+            </Box>
+          ) : conversation.length === 0 ? (
+            // Empty state
+            <Box flexDirection="column" paddingX={1} paddingY={1}>
+              <Text color={agent.colour} dimColor bold>{agent.emoji} {agent.name} ready</Text>
+              <Text> </Text>
+              <Text color="gray" dimColor>Type a prompt below and press Enter</Text>
+              <Text color="gray" dimColor>Use Tab / Shift+Tab to switch agents</Text>
+              <Text> </Text>
+              <Text color="gray" dimColor>Commands: /msg  /reply  /clear  /status</Text>
+            </Box>
+          ) : (
+            // Newest-last scroll: always shows most recent content
+            visibleEntries.map((msg, i) => (
+              <ConvLine key={`${msg.role}-${i}`} msg={msg} isActive={true} innerW={innerW} />
+            ))
+          )
         ) : (
           // Inactive: compact flat lines
-          flatLines.slice(-MAX_LINES_INACTIVE).map((line, i) => (
-            <Text
-              key={i}
-              color={
-                line.type === 'user'    ? 'cyan'   :
-                line.type === 'notif'   ? 'yellow' :
-                line.type === 'system'  ? 'green'  :
-                line.type === 'cursor'  ? 'cyan'   : 'gray'
-              }
-              dimColor={line.type === 'assistant'}
-              wrap="truncate"
-            >
-              {line.text || ' '}
-            </Text>
-          ))
+          flatLines.length === 0 ? (
+            <Text color="gray" dimColor paddingX={1}> idle</Text>
+          ) : (
+            flatLines.slice(-MAX_LINES_INACTIVE).map((line, i) => (
+              <Text
+                key={i}
+                color={
+                  line.type === 'user'   ? 'cyan'   :
+                  line.type === 'notif'  ? 'yellow' :
+                  line.type === 'system' ? 'green'  :
+                  line.type === 'cursor' ? 'cyan'   : 'gray'
+                }
+                dimColor={line.type === 'assistant'}
+                wrap="truncate"
+              >
+                {line.text || ' '}
+              </Text>
+            ))
+          )
         )}
       </Box>
 
@@ -190,15 +270,19 @@ export default function AgentPane({
             <Text color={agent.colour} dimColor>{'-'.repeat(innerW)}</Text>
           </Box>
           <Box paddingX={1} flexShrink={0}>
-            <Text color={agent.colour} bold>[T{terminalIndex}] > </Text>
-            {isProcessing ? (
-              <Text color="yellow" dimColor>processing...</Text>
+            <Text color={agent.colour} bold>[T{terminalIndex}] &gt; </Text>
+            {voiceStatus === 'recording' ? (
+              <Text color="red" bold>🎤 listening... (Space to stop)</Text>
+            ) : voiceStatus === 'transcribing' ? (
+              <Text color="magenta">⌨  transcribing...</Text>
+            ) : isProcessing ? (
+              <Text color="yellow">● thinking...</Text>
             ) : (
               <TextInput
                 value={inputValue || ''}
                 onChange={onInputChange || (() => {})}
                 onSubmit={onSubmit || (() => {})}
-                placeholder="/msg  /reply  /clear  /status  or type a prompt"
+                placeholder="type a prompt and press Enter"
                 placeholderTextColor="gray"
               />
             )}

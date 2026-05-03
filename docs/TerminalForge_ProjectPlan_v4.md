@@ -648,3 +648,205 @@ On Ctrl+C: trap kills bridge and voice PIDs, resets voice_state.json to idle.
 | `npm run voice:wake` | `python3 voice/pipeline.py --mode wake-word` |
 | `npm run voice:hotkey` | `node bridge/hotkey-fallback.js` |
 | `npm run voice:debug` | `python3 voice/pipeline.py --debug` |
+
+---
+
+## 13. Complete User Commands Reference
+
+Everything needed to start, use, and stop TerminalForge.
+
+### 13.1 Starting the Application
+
+| Command | What It Does |
+|---|---|
+| `./start.sh` | Interactive one-command launcher — prompts for voice mode, installs missing deps, starts everything |
+| `npm run go` | Same as `./start.sh` |
+| `npm run go:voice` | Start with push-to-talk voice (Space to record) |
+| `npm run go:auto` | Start with always-listening auto-VAD voice |
+| `npm run go:no-voice` | Start without voice pipeline (text-only) |
+| `npm run go:debug` | Start everything with `DEBUG=tf:*` verbose logging |
+| `npm run ui` | TUI only — bridge server must already be running separately |
+| `npm run ui:debug` | TUI with verbose debug logging |
+| `npm start` | Bridge server only (port 3333) |
+| `npm run launch` | Opens 7 separate windows in iTerm2 or Terminal.app |
+| `npm run launch:tmux` | Opens 7 tmux windows — switch with Ctrl+B 0–6 |
+
+### 13.2 Stopping the Application
+
+| Action | Command |
+|---|---|
+| Clean stop (recommended) | Press `Ctrl+C` in the TUI or start.sh terminal |
+| Kill bridge server | `kill $(lsof -ti:3333)` |
+| Kill voice pipeline | `pkill -f "pipeline.py"` |
+| Kill agent REPLs | `pkill -f "agent-repl.js"` |
+| Kill bus monitor | `pkill -f "bus-monitor.js"` |
+| Kill tmux session | `tmux kill-session -t terminalforge` |
+| Kill everything at once | `kill $(lsof -ti:3333) && pkill -f "agent-repl.js" && pkill -f "bus-monitor.js"` |
+
+### 13.3 Switching Between Agents
+
+**TUI keyboard (inside `npm run ui`):**
+
+| Key | Action |
+|---|---|
+| `Tab` | Next agent — T1 → T2 → T3 → T4 → T5 → T1 |
+| `Shift+Tab` | Previous agent — T1 → T5 → T4 → T3 → T2 → T1 |
+
+**iPhone Volume Buttons:**
+
+| Button | Action |
+|---|---|
+| Volume DOWN | Next agent (same wrap-around as Tab) |
+| Volume UP | Previous agent (same wrap-around as Shift+Tab) |
+| Hold either button 2 seconds | Toggle Manual ↔ Autonomous Mode |
+
+**Simulate via curl (for testing or scripting):**
+
+```bash
+curl -X POST http://localhost:3333/volume \
+  -H "Content-Type: application/json" -d '{"button":"down"}'   # next agent
+
+curl -X POST http://localhost:3333/volume \
+  -H "Content-Type: application/json" -d '{"button":"up"}'     # previous agent
+
+curl -X POST http://localhost:3333/volume \
+  -H "Content-Type: application/json" -d '{"button":"hold"}'   # toggle mode
+```
+
+### 13.4 TUI Keyboard Controls
+
+| Key | Action |
+|---|---|
+| `Tab` | Switch to next agent |
+| `Shift+Tab` | Switch to previous agent |
+| `Enter` | Submit typed prompt to active agent |
+| `Space` | Push-to-talk toggle — starts/stops recording (only when input box is empty; voice pipeline must be running) |
+| `Ctrl+C` | Quit TerminalForge cleanly |
+
+### 13.5 In-TUI Slash Commands
+
+Type these in the active agent's input box and press Enter:
+
+| Command | What It Does |
+|---|---|
+| `/clear` | Clear conversation history for the active agent |
+| `/status` | Show: active terminal number, mode (manual/auto), task status |
+| `/msg <agentId> <type> <message>` | Send a message directly to another agent |
+| `/reply <message>` | Quick-reply to the last message received from another agent |
+
+**Examples:**
+```
+/msg senior-dev escalation JWT tokens expire after 60s even with rememberMe=true — need review
+/msg qa-engineer task Write integration tests for POST /auth/login endpoint
+/msg devops-engineer handoff Auth module complete and merged to main — please containerise
+/reply Approved — the implementation looks correct, add a timestamp field to the response
+/status
+/clear
+```
+
+### 13.6 Standalone Agent REPL Commands (`npm run agent N`)
+
+Available in each individual agent terminal opened via `npm run agent 1` through `5`:
+
+| Command | What It Does |
+|---|---|
+| `/msg <agentId> <type> <message>` | Send a message to another agent |
+| `/reply <message>` | Reply to the last received message |
+| `/clear` | Clear this agent's conversation history |
+| `/status` | Show current terminal state from state.json |
+| `/quit` | Close this agent REPL |
+
+### 13.7 Voice Pipeline Commands
+
+```bash
+# Integrated startup (preferred)
+npm run go:voice            # push-to-talk (Space in TUI or hotkey terminal)
+npm run go:auto             # auto-VAD (always listening, 1.5s pause sends)
+
+# Standalone voice pipeline (run alongside npm run ui)
+npm run voice               # push-to-talk mode
+npm run voice:auto          # auto-VAD mode
+npm run voice:wake          # wake-word mode ("Hey Forge")
+npm run voice:hotkey        # separate hotkey controller terminal
+npm run voice:debug         # push-to-talk with verbose logging
+
+# Direct Python invocation
+python3 -m voice.pipeline                        # push-to-talk (default)
+python3 -m voice.pipeline --mode auto-vad        # auto-VAD
+python3 -m voice.pipeline --mode wake-word       # wake-word
+python3 -m voice.pipeline --model small.en       # use small.en model (more accurate)
+python3 -m voice.pipeline --model base.en --debug  # verbose debug logging
+```
+
+**Push-to-talk keyboard controls:**
+
+| Key | Action |
+|---|---|
+| `Space` (in TUI) | Toggle recording on/off |
+| `Space` / `R` / `F5` (in hotkey terminal) | Toggle recording on/off |
+| `ESC` (in hotkey terminal) | Cancel recording, discard audio |
+
+**Voice status indicators in TUI status bar:**
+
+| Indicator | Meaning |
+|---|---|
+| `🎙 Space=record` (grey) | Pipeline connected, idle, ready to record |
+| `🎤 Recording` (red) | Currently recording your voice |
+| `⌨ Transcribing` (yellow) | Audio captured, running faster-whisper |
+| `👂 Listening` (cyan) | Auto-VAD mode — always listening |
+| `👂 "Hey Forge"` (cyan) | Wake-word mode — waiting for trigger phrase |
+
+### 13.8 Agent and Message Bus Reference
+
+**Agent IDs (used with `/msg`):**
+
+| ID | Terminal | Name |
+|---|---|---|
+| `junior-dev` | T1 | Junior Developer |
+| `senior-dev` | T2 | Senior Developer |
+| `qa-engineer` | T3 | QA Engineer |
+| `devops-engineer` | T4 | DevOps Engineer |
+| `project-manager` | T5 | Project Manager |
+
+**Message types (used with `/msg`):**
+
+| Type | When to Use |
+|---|---|
+| `task` | Assign a piece of work to another agent |
+| `review` | Request or return a code/design review |
+| `escalation` | Escalate a blocker you can't resolve alone |
+| `bug-report` | File a bug with repro steps and severity |
+| `handoff` | Pass context and in-progress work to another agent |
+| `summary` | Share a progress update or completion summary |
+
+### 13.9 Inspecting State and Logs
+
+```bash
+# Current application state
+cat .terminalforge/state.json           # active terminal, mode, all 5 task statuses
+curl http://localhost:3333/health       # bridge server health check
+curl http://localhost:3333/state        # bridge server — current state.json
+
+# Agent message history
+tail -f .terminalforge/messages.log     # live feed of all agent-to-agent messages
+cat .terminalforge/messages.log         # full historical message log
+
+# Voice pipeline state
+cat .terminalforge/voice_state.json     # idle / recording / transcribing + mode
+cat .terminalforge/voice_input.json     # latest transcription received from pipeline
+
+# Project and task context
+cat .terminalforge/project.md           # current project description (set via PM agent)
+cat .terminalforge/open_tasks.json      # open tasks visible to all agents
+cat .terminalforge/handoffs.md          # agent handoff notes (auto-updated on switch)
+cat .terminalforge/config.json          # user config: maxSteps, voiceMode, whisperModel
+```
+
+### 13.10 Testing and Diagnostics
+
+```bash
+npm run test:switch     # Phase 1 — navigation + state + debounce (19 tests)
+npm run test:agents     # Phase 2 — agent unit tests (47 tests)
+npm run test:smoke      # Phase 2 — live Claude API streaming test (requires .env)
+npm run lint            # ESLint check on all JS files
+```

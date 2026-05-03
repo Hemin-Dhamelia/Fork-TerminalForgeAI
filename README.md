@@ -173,6 +173,196 @@ npm start              # Start bridge server only (port 3333)
 
 ---
 
+## Complete Commands Reference
+
+Everything you can do in TerminalForge — in one place.
+
+### Starting the Application
+
+```bash
+# ONE-COMMAND LAUNCH (recommended) — checks deps, starts everything
+./start.sh                  # interactive: prompts for voice mode
+npm run go                  # same as ./start.sh
+
+# Start with a specific voice mode (no prompt)
+npm run go:voice            # push-to-talk (press Space to record)
+npm run go:auto             # always-listening auto-VAD
+npm run go:no-voice         # text-only, no voice pipeline
+npm run go:debug            # everything + DEBUG=tf:* verbose logging
+
+# Start components individually
+npm run ui                  # TUI only (bridge must already be running)
+npm run ui:debug            # TUI with verbose debug logging
+npm start                   # bridge server only (port 3333)
+
+# Multi-window launches (alternative to TUI)
+npm run launch              # opens 7 windows in iTerm2 / Terminal.app
+npm run launch:tmux         # opens 7 tmux windows (Ctrl+B 0–6 to switch)
+```
+
+### Stopping the Application
+
+```bash
+Ctrl+C                             # in TUI or start.sh — cleanly stops all processes
+
+# Kill individual components manually
+kill $(lsof -ti:3333)              # kill bridge server (port 3333)
+pkill -f "pipeline.py"             # kill voice pipeline
+pkill -f "agent-repl.js"           # kill all agent REPL windows
+pkill -f "bus-monitor.js"          # kill bus monitor
+tmux kill-session -t terminalforge # kill tmux session (if using tmux layout)
+
+# Kill everything at once
+kill $(lsof -ti:3333) && pkill -f "agent-repl.js" && pkill -f "bus-monitor.js"
+```
+
+### Switching Agents
+
+**Keyboard (inside the TUI):**
+```
+Tab           → next agent     (T1 → T2 → T3 → T4 → T5 → T1)
+Shift+Tab     → previous agent (T1 → T5 → T4 → T3 → T2 → T1)
+```
+
+**iPhone Volume Buttons:**
+```
+Vol DOWN      → next agent     (T1 → T2 → T3 → T4 → T5 → T1)
+Vol UP        → previous agent (T5 → T4 → T3 → T2 → T1 → T5)
+Hold 2s       → toggle Manual ↔ Auto mode
+```
+
+**Simulate via curl (testing / scripting):**
+```bash
+curl -X POST http://localhost:3333/volume \
+  -H "Content-Type: application/json" -d '{"button":"down"}'   # next agent
+
+curl -X POST http://localhost:3333/volume \
+  -H "Content-Type: application/json" -d '{"button":"up"}'     # previous agent
+
+curl -X POST http://localhost:3333/volume \
+  -H "Content-Type: application/json" -d '{"button":"hold"}'   # toggle mode
+```
+
+### TUI Keyboard Controls (inside `npm run ui`)
+
+```
+Tab           → switch to next agent
+Shift+Tab     → switch to previous agent
+Enter         → submit typed prompt to active agent
+Space         → push-to-talk toggle (only when input box is empty;
+                voice pipeline must be running)
+Ctrl+C        → quit TerminalForge
+```
+
+### In-TUI Slash Commands (type in the active agent input box)
+
+```
+/clear                              → clear conversation history for the active agent
+/status                             → show state: active terminal, mode, task status
+/msg <agentId> <type> <message>     → send a message directly to another agent
+/reply <message>                    → quick-reply to the last received message
+```
+
+**Examples:**
+```
+/msg senior-dev escalation Need a review on my JWT implementation before merge
+/msg qa-engineer task Please write tests for the new /auth/refresh endpoint
+/reply Looks good — approved for merge
+/status
+/clear
+```
+
+### Standalone Agent REPL Commands (`npm run agent N`)
+
+```
+/msg <agentId> <type> <message>     → send a message to another agent
+/reply <message>                    → reply to the last received message
+/clear                              → clear this agent's conversation history
+/status                             → show current terminal state from state.json
+/quit                               → close this agent REPL
+```
+
+### Voice Pipeline Commands
+
+```bash
+# Start voice (standalone — run alongside npm run ui)
+npm run voice               # push-to-talk mode  (Space / R / F5 to toggle)
+npm run voice:auto          # auto-VAD mode      (always listening, 1.5s pause sends)
+npm run voice:wake          # wake-word mode     (say "Hey Forge" to activate)
+npm run voice:hotkey        # separate hotkey controller terminal (for push-to-talk)
+npm run voice:debug         # push-to-talk with verbose debug logging
+
+# Voice pipeline flags (python direct)
+python3 -m voice.pipeline --mode push-to-talk
+python3 -m voice.pipeline --mode auto-vad
+python3 -m voice.pipeline --mode wake-word
+python3 -m voice.pipeline --model small.en   # use a larger/more accurate model
+python3 -m voice.pipeline --debug            # verbose logging
+```
+
+**Push-to-talk keyboard controls (in hotkey terminal or via Space in TUI):**
+```
+Space / R / F5    → start recording (hold while speaking, or press to toggle)
+Space / R / F5    → stop recording and send to active agent
+ESC               → cancel recording, discard audio
+```
+
+### Agent IDs (for /msg and /reply commands)
+
+```
+junior-dev          T1 — Junior Developer
+senior-dev          T2 — Senior Developer
+qa-engineer         T3 — QA Engineer
+devops-engineer     T4 — DevOps Engineer
+project-manager     T5 — Project Manager
+```
+
+### Message Types (for /msg command)
+
+```
+task          → assign a task to another agent
+review        → request or return a code review
+escalation    → escalate a blocker to a senior agent
+bug-report    → file a bug with repro steps
+handoff       → pass work context to another agent
+summary       → share a progress summary
+```
+
+### Inspecting State and Logs
+
+```bash
+# Current application state
+cat .terminalforge/state.json          # active terminal, mode, all 5 task statuses
+
+# Agent message history
+tail -f .terminalforge/messages.log    # live feed of all agent-to-agent messages
+cat .terminalforge/messages.log        # full message log
+
+# Voice pipeline state
+cat .terminalforge/voice_state.json    # idle / recording / transcribing
+cat .terminalforge/voice_input.json    # latest transcription from pipeline
+
+# Project and tasks
+cat .terminalforge/project.md          # current project description
+cat .terminalforge/open_tasks.json     # open task list
+cat .terminalforge/handoffs.md         # agent handoff notes
+
+# Check bridge server health
+curl http://localhost:3333/health
+curl http://localhost:3333/state
+```
+
+### Running Tests
+
+```bash
+npm run test:switch    # Phase 1 — navigation + state (19 tests)
+npm run test:agents    # Phase 2 — agent unit tests (47 tests)
+npm run test:smoke     # Phase 2 — live Claude API streaming test (requires .env)
+npm run lint           # ESLint check
+```
+
+---
+
 ## Running Tests
 
 ```bash

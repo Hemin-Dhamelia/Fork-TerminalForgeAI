@@ -25,7 +25,7 @@ import { Box, useInput, useStdout, useStdin } from 'ink';
 
 import { routePrompt, clearHistory } from '../core/agent-router.js';
 import { subscribe, subscribeAll, unsubscribe, publish, readLog, AGENT_NAMES } from '../core/message-bus.js';
-import { readState, setTerminalStatus, switchTerminal, writeState, readVoiceInput, consumeVoiceInput, readVoiceState } from '../core/state.js';
+import { readState, setTerminalStatus, switchTerminal, writeState, readVoiceInput, consumeVoiceInput, readVoiceState, writeVoiceState } from '../core/state.js';
 import { getAgentIdByTerminal } from '../core/context-manager.js';
 
 import StatusBar      from './StatusBar.jsx';
@@ -63,9 +63,13 @@ export default function App() {
 
   // -- Voice status (reflects Python pipeline state) -------------------------
   const [voiceStatus, setVoiceStatus] = useState('idle'); // 'idle'|'listening'|'recording'|'transcribing'
+  const [voiceMode,   setVoiceMode]   = useState('');     // 'push-to-talk'|'auto-vad'|'wake-word'|''
 
   // -- Track last consumed voice input to avoid double-submit ----------------
   const lastVoiceTimestamp = useRef(null);
+
+  // -- Stable ref to handleSubmit so voice effect never has a stale closure --
+  const handleSubmitRef = useRef(null);
 
   // -- Stable refs for use inside callbacks / intervals ---------------------
   const activeRef      = useRef(1);
@@ -99,7 +103,10 @@ export default function App() {
       try {
         // Poll voice pipeline status for indicator
         const vs = await readVoiceState();
-        if (mounted) setVoiceStatus(vs.status || 'idle');
+        if (mounted) {
+          setVoiceStatus(vs.status || 'idle');
+          if (vs.mode) setVoiceMode(vs.mode);  // track mode for push-to-talk hint
+        }
 
         // Check for new transcription to submit
         const vi = await readVoiceInput();
@@ -107,19 +114,24 @@ export default function App() {
         if (vi.consumed) return;
         if (lastVoiceTimestamp.current === vi.timestamp) return;
 
-        // New unconsumed voice input — mark consumed first, then submit
+        // New unconsumed voice input — mark consumed first to prevent double-submit
         lastVoiceTimestamp.current = vi.timestamp;
         await consumeVoiceInput();
 
-        // Auto-submit the transcribed text to the active agent (same as pressing Enter)
         if (vi.text?.trim() && !processingRef.current) {
-          handleSubmit(vi.text.trim());
+          // Flash transcribed text in input box so user can see what was heard
+          setInputValue(vi.text.trim());
+          // Short delay so user can read it, then submit
+          await new Promise(r => setTimeout(r, 900));
+          if (mounted && !processingRef.current) {
+            handleSubmitRef.current?.(vi.text.trim());
+          }
         }
       } catch { /* non-fatal — voice pipeline may not be running */ }
     };
-    const iv = setInterval(pollVoice, 500);
+    const iv = setInterval(pollVoice, 150); // 150ms — was 500ms, reduces perceived latency
     return () => { mounted = false; clearInterval(iv); };
-  }, [handleSubmit]);
+  }, []); // no deps — uses refs only, never stale
 
   // -- Load historical bus messages from messages.log on mount --------------
   useEffect(() => {
@@ -189,18 +201,41 @@ export default function App() {
     } catch { /* non-fatal */ }
   }, []);
 
+  // -- Push-to-talk toggle: Space bar in the TUI --------------------------------
+  // This replaces the separate hotkey-fallback.js window — no extra terminal needed.
+  const toggleRecording = useCallback(async () => {
+    try {
+      const vs = await readVoiceState();
+      if (vs.status === 'recording') {
+        // Stop recording → pipeline picks up the audio
+        await writeVoiceState({ status: 'idle', mode: vs.mode || 'push-to-talk', recording: false });
+        setVoiceStatus('idle');
+      } else if (vs.status === 'idle' && (vs.mode === 'push-to-talk' || vs.mode === '')) {
+        // Start recording
+        await writeVoiceState({ status: 'recording', mode: 'push-to-talk', recording: true });
+        setVoiceStatus('recording');
+      }
+      // In auto-vad / wake-word mode, Space does nothing (pipeline controls state)
+    } catch { /* non-fatal */ }
+  }, []);
+
   // -- Keyboard navigation (only when TTY raw mode is available) ------------
   useInput((input, key) => {
-    if (processingRef.current) return;
-
     if (key.tab && !key.shift) {
-      // Tab -> next agent
+      if (processingRef.current) return;
       goToTerminal(activeRef.current + 1);
       return;
     }
     if (key.tab && key.shift) {
-      // Shift+Tab -> previous agent
+      if (processingRef.current) return;
       goToTerminal(activeRef.current - 1);
+      return;
+    }
+    // Space = push-to-talk toggle (when not typing — only fires if input is empty/whitespace)
+    // Use .trim() so ink-text-input's space character accumulation doesn't block repeated presses
+    if (input === ' ' && !inputValue.trim()) {
+      setInputValue('');  // clear any space chars ink-text-input may have appended
+      toggleRecording();
       return;
     }
   }, { isActive: Boolean(isRawModeSupported) });
@@ -370,25 +405,25 @@ export default function App() {
     }
   }, [conversations]);
 
+  // Keep ref in sync so the voice polling effect always calls the latest version
+  handleSubmitRef.current = handleSubmit;
+
   // -- Dimensions ------------------------------------------------------------
   const totalW   = stdout?.columns || 220;
   const totalH   = stdout?.rows    || 50;
   const STATUS_H = 1;
   const paneH    = totalH - STATUS_H;
 
-  // On narrow terminals (< 160 cols) use equal panes; on wide screens active gets more space
-  const isWide     = totalW >= 160;
-  const busW       = Math.max(20, Math.floor(totalW * 0.12));
+  // Layout: active pane always gets the most space
+  // Bus monitor: 18 cols minimum, capped at 22 cols so agents get max room
+  const busW       = Math.min(22, Math.max(18, Math.floor(totalW * 0.14)));
   const agentAreaW = totalW - busW;
 
-  // Wide: active pane = 36%, each inactive = 16%
-  // Narrow: all panes equal
-  const activePaneW = isWide
-    ? Math.floor(agentAreaW * 0.36)
-    : Math.floor(agentAreaW / TOTAL);
-  const inactiveW = isWide
-    ? Math.floor((agentAreaW - activePaneW) / (TOTAL - 1))
-    : Math.floor(agentAreaW / TOTAL);
+  // Active pane = 44% of agent area; 4 inactive panes share the rest equally
+  // On very narrow terminals (< 120) active gets 50% so it's still readable
+  const activeRatio  = totalW < 120 ? 0.50 : 0.44;
+  const activePaneW  = Math.floor(agentAreaW * activeRatio);
+  const inactiveW    = Math.floor((agentAreaW - activePaneW) / (TOTAL - 1));
 
   return (
     <Box flexDirection="column" width={totalW} height={totalH}>
@@ -401,6 +436,7 @@ export default function App() {
         isProcessing={isProcessing}
         busMessageCount={busMessages.length}
         voiceStatus={voiceStatus}
+        voiceMode={voiceMode}
         width={totalW}
       />
 
@@ -420,6 +456,7 @@ export default function App() {
               onInputChange={isActive ? setInputValue : undefined}
               onSubmit={isActive ? handleSubmit : undefined}
               isProcessing={isActive && isProcessing}
+              voiceStatus={isActive ? voiceStatus : 'idle'}
               width={isActive ? activePaneW : inactiveW}
               height={paneH}
             />

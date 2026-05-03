@@ -655,3 +655,132 @@ pkill -f "agent-repl.js"
 pkill -f "bus-monitor.js"
 tmux kill-session -t terminalforge
 ```
+
+---
+
+## COMPLETE USER COMMANDS REFERENCE
+
+### Starting the Application
+
+```bash
+./start.sh                  # interactive — prompts for voice mode (RECOMMENDED)
+npm run go                  # same as ./start.sh
+npm run go:voice            # start with push-to-talk voice
+npm run go:auto             # start with auto-VAD (always-listening) voice
+npm run go:no-voice         # start without voice (text-only)
+npm run go:debug            # start everything + DEBUG=tf:* verbose logging
+npm run ui                  # TUI only (bridge server must already be running)
+npm run ui:debug            # TUI with verbose debug logging
+npm start                   # bridge server only (port 3333)
+npm run launch              # opens 7 separate windows in iTerm2 / Terminal.app
+npm run launch:tmux         # opens 7 tmux windows (Ctrl+B 0-6 to switch)
+```
+
+### Stopping the Application
+
+```bash
+Ctrl+C                             # clean stop — works in TUI or start.sh
+kill $(lsof -ti:3333)              # kill bridge server
+pkill -f "pipeline.py"             # kill voice pipeline
+pkill -f "agent-repl.js"           # kill agent REPLs
+pkill -f "bus-monitor.js"          # kill bus monitor
+tmux kill-session -t terminalforge  # kill tmux session
+```
+
+### Switching Agents
+
+```bash
+# Inside the TUI:
+Tab                    # → next agent  (T1 → T2 → T3 → T4 → T5 → T1)
+Shift+Tab              # → previous agent (T1 → T5 → T4 → T3 → T2 → T1)
+
+# iPhone Volume Buttons:
+Vol DOWN               # → next agent
+Vol UP                 # → previous agent
+Hold 2s                # → toggle Manual ↔ Autonomous Mode
+
+# Simulate via curl:
+curl -X POST http://localhost:3333/volume -H "Content-Type: application/json" -d '{"button":"down"}'
+curl -X POST http://localhost:3333/volume -H "Content-Type: application/json" -d '{"button":"up"}'
+curl -X POST http://localhost:3333/volume -H "Content-Type: application/json" -d '{"button":"hold"}'
+```
+
+### TUI Keyboard Controls
+
+```
+Tab           → next agent
+Shift+Tab     → previous agent
+Enter         → submit typed prompt to active agent
+Space         → push-to-talk toggle (only when input box is empty;
+                voice pipeline must be running)
+Ctrl+C        → quit
+```
+
+### In-TUI Slash Commands (type in the active agent input box)
+
+```
+/clear                              → clear conversation history for active agent
+/status                             → show active terminal, mode, task status
+/msg <agentId> <type> <message>     → send a message to another agent
+/reply <message>                    → reply to the last received message
+```
+
+Examples:
+```
+/msg senior-dev escalation JWT refresh tokens expire after 60s — need review
+/msg qa-engineer task Write tests for POST /auth/login
+/reply Approved — looks good, add a timestamp field
+/status
+/clear
+```
+
+### Standalone Agent REPL Commands (npm run agent N)
+
+```
+/msg <agentId> <type> <message>     → send message to another agent
+/reply <message>                    → reply to last received message
+/clear                              → clear conversation history
+/status                             → show state from state.json
+/quit                               → close this REPL
+```
+
+### Voice Pipeline
+
+```bash
+npm run voice               # push-to-talk (Space/R/F5 to toggle)
+npm run voice:auto          # auto-VAD (1.5s silence sends)
+npm run voice:wake          # wake-word ("Hey Forge" to activate)
+npm run voice:hotkey        # separate hotkey controller terminal
+npm run voice:debug         # verbose debug logging
+
+# Direct Python:
+python3 -m voice.pipeline --mode push-to-talk
+python3 -m voice.pipeline --mode auto-vad
+python3 -m voice.pipeline --mode wake-word
+python3 -m voice.pipeline --model small.en   # larger model for better accuracy
+python3 -m voice.pipeline --debug
+```
+
+Push-to-talk keys: `Space` in TUI (when input empty) · `Space/R/F5` in hotkey terminal · `ESC` to cancel
+
+### Agent IDs and Message Types
+
+```
+Agent IDs:    junior-dev · senior-dev · qa-engineer · devops-engineer · project-manager
+Message types: task · review · escalation · bug-report · handoff · summary
+```
+
+### Inspecting State
+
+```bash
+cat .terminalforge/state.json           # active terminal, mode, all 5 task statuses
+cat .terminalforge/messages.log         # full agent-to-agent message log
+tail -f .terminalforge/messages.log     # live message feed
+cat .terminalforge/voice_state.json     # voice pipeline status
+cat .terminalforge/voice_input.json     # latest transcription
+cat .terminalforge/project.md           # current project description
+cat .terminalforge/open_tasks.json      # current task list
+cat .terminalforge/config.json          # user config (maxSteps, voiceMode, etc.)
+curl http://localhost:3333/health       # bridge health check
+curl http://localhost:3333/state        # bridge — live state.json
+```

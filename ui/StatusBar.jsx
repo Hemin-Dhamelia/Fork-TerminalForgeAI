@@ -9,10 +9,17 @@ import { AGENT_INFO, getStatusStyle } from './TerminalColorManager.jsx';
 
 // Voice status → display config
 const VOICE_DISPLAY = {
-  idle:         null,                                        // hidden when idle
+  idle:         null,
   listening:    { icon: '👂', label: 'Listening',    color: 'cyan'    },
   recording:    { icon: '🎤', label: 'Recording',    color: 'red'     },
   transcribing: { icon: '⌨ ', label: 'Transcribing', color: 'magenta' },
+};
+
+// Voice mode idle hints (shown when pipeline is connected but idle)
+const VOICE_IDLE_HINT = {
+  'push-to-talk': { icon: '🎙', label: 'Space=record', color: 'gray' },
+  'auto-vad':     { icon: '👂', label: 'Listening',    color: 'cyan' },
+  'wake-word':    { icon: '👂', label: '"Hey Forge"',  color: 'cyan' },
 };
 
 export default function StatusBar({
@@ -22,11 +29,14 @@ export default function StatusBar({
   isProcessing,
   busMessageCount,
   voiceStatus,
+  voiceMode,
   width,
 }) {
   const agent   = AGENT_INFO[activeTerminal] || {};
   const modeCol = mode === 'auto' ? 'yellow' : 'gray';
-  const voice   = VOICE_DISPLAY[voiceStatus] || null;
+
+  // Active voice state overrides idle hint
+  const voice = VOICE_DISPLAY[voiceStatus] || (voiceMode ? VOICE_IDLE_HINT[voiceMode] : null);
 
   return (
     <Box width={width} paddingX={1} backgroundColor="black" flexShrink={0}>
