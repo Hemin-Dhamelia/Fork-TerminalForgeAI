@@ -195,11 +195,6 @@ The full pipeline ran live against the Claude API in a single test:
 │   ├── qa-engineer.js      T3 — system prompt, tools, identity
 │   ├── devops-engineer.js  T4 — system prompt, tools, identity
 │   └── project-manager.js  T5 — system prompt, orchestrator config
-├── scripts/
-│   ├── agent-repl.js       Interactive per-agent REPL with /msg and /reply
-│   ├── bus-monitor.js      Live inter-agent traffic monitor
-│   ├── launch.sh           Opens 7 terminal windows (iTerm2 or Terminal.app)
-│   └── tmux-layout.sh      tmux 7-window layout
 ├── bridge/
 │   └── server.js           Express server :3333 — receives volume button events
 ├── voice/                  (Phase 3 — not yet built)
@@ -207,13 +202,18 @@ The full pipeline ran live against the Claude API in a single test:
 │   ├── transcriber.py      faster-whisper wrapper
 │   ├── wake-word.py        "Hey Forge" wake word
 │   └── tts.py              TTS output
-├── ui/                     (Phase 4 — not yet built)
-│   ├── App.js              Root Ink component
-│   ├── AgentBadge.js       Active agent display
-│   ├── ModeIndicator.js    MANUAL / AUTO badge
-│   ├── StreamPanel.js      Streaming output panel
-│   ├── VoiceIndicator.js   Listening / transcribing status
-│   └── TerminalColorManager.js  Task state → terminal colour
+├── ui/                     ✅ BUILT — Phase 4 TUI (all 5 agents in one fullscreen window)
+│   ├── App.jsx             Root Ink component — layout, state management, streaming
+│   ├── AgentPane.jsx       Per-agent pane: active (input + streaming) / inactive (compact)
+│   ├── StatusBar.jsx       Top bar: active agent, mode, status dots, key hints
+│   ├── BusMonitorPanel.jsx Right-column live inter-agent message feed
+│   └── TerminalColorManager.jsx  Agent info, status → colour/label/dot mappings
+├── scripts/
+│   ├── agent-repl.js       Interactive per-agent REPL with /msg and /reply
+│   ├── bus-monitor.js      Live inter-agent traffic monitor
+│   ├── ui.js               TUI entry point — loads .env, renders App, cursor hide/restore
+│   ├── launch.sh           Opens 7 terminal windows (iTerm2 or Terminal.app)
+│   └── tmux-layout.sh      tmux 7-window layout
 ├── tests/
 │   ├── test-switch.js      Phase 1 tests (19)
 │   ├── test-agents.js      Phase 2 tests (47)
@@ -236,7 +236,7 @@ The full pipeline ran live against the Claude API in a single test:
 | Phase 2 | Agent Engine — 5 Claude sessions, context, git | ✅ Complete |
 | Bonus | Launcher scripts + observability layer | ✅ Complete |
 | Phase 3 | Voice Layer — faster-whisper, silero-vad, push-to-talk | 🔜 Next |
-| Phase 4 | TUI — Ink components, terminal colour system | 🔜 |
+| Phase 4 | TUI — Ink components, terminal colour system | ✅ Complete |
 | Phase 5 | Agent Comms — PM orchestrator loop (bus core ✅ done) | 🔜 |
 | Phase 6 | Polish — error handling, QUICKSTART.md, demo | 🔜 |
 
@@ -249,7 +249,7 @@ The full pipeline ran live against the Claude API in a single test:
 - **Voice STT:** faster-whisper (local, offline)
 - **Voice Activity:** silero-vad
 - **Wake Word:** openWakeWord ("Hey Forge")
-- **Terminal UI:** Ink (React for terminal) — Phase 4
+- **Terminal UI:** Ink (React for terminal) — ✅ Built (`npm run ui`)
 - **Message Bus:** Node.js EventEmitter (in-process, no broker)
 - **iPhone Bridge:** iOS Shortcuts → HTTP POST → localhost:3333
 
