@@ -100,6 +100,23 @@ All files built, tested, and merged to main via PR.
 
 All message flow tests passing: targeted delivery, subscribeAll fan-out, log persistence, invalid-agent rejection, invalid-type rejection.
 
+### ✅ End-to-End Testing — COMPLETE (May 2026)
+
+Full live test suite verified against the real stack (bridge server + all 5 agents + message bus + context injection + bus monitor + navigation) using the real Claude API.
+
+| # | Test Area | Result | Detail |
+|---|-----------|--------|--------|
+| 1 | Bridge server | ✅ Pass | `/health`, `/volume` (down/up/hold), `/state`, 300ms debounce all working |
+| 2 | All 5 agents — Claude API | ✅ Pass | T1 1797ms · T2 1666ms · T3 2211ms · T4 2264ms · T5 2371ms — all correct identity responses |
+| 3 | Agent-to-agent messaging | ✅ Pass | `/msg`, `/reply`, targeted delivery, `subscribeAll` fan-out, all 3 validation rejections correct |
+| 4 | Message bus | ✅ 11/11 | publish/subscribe/readLog/getUnread, invalid agent/type/payload all rejected correctly |
+| 5 | Context injection | ✅ 17/18 | PROJECT, GIT, TASKS, MESSAGES, HANDOFF sections present in every agent call |
+| 6 | Bus monitor | ✅ Pass | History replay, live `subscribeAll` feed, 500ms cross-process poll confirmed |
+| 7 | Navigation + state | ✅ 15/15 | DOWN 1→2→3→4→5→1, UP 1→5→4→3→2→1→5, HOLD toggle manual↔auto, debounce 100ms |
+| 8 | Full E2E pipeline | ✅ 25/25 | PM → Claude → task → junior-dev context → Claude impl → escalation → senior-dev Claude review |
+
+**E2E pipeline summary:** PM (T5) called Claude to create a task → published to `junior-dev` via message bus with `taskId: task-e2e-001` → Junior Dev's `buildAgentContext()` injected the unread task → Junior Dev (T1) called Claude, wrote implementation + unit test, escalated → escalation published to `senior-dev` with same taskId → Senior Dev (T2) called Claude, reviewed and approved. Full trace confirmed in `messages.log`. Zero regressions.
+
 ### 🔜 Phase 3: Voice Layer — NEXT
 ### 🔜 Phase 4: TUI (Ink)
 ### 🔜 Phase 5: Agent Communication (message bus ✅ done — PM orchestrator loop remaining)
@@ -492,9 +509,10 @@ Messages for you: [unread messages from messages.log addressed to this agent]
 - Phase 2: ✅ COMPLETE — Agent engine built and tested
 - Launcher Scripts: ✅ COMPLETE — 7-window launch (bridge + 5 agents + bus monitor)
 - Observability Layer: ✅ COMPLETE — message bus + bus monitor + inline REPL banners
+- End-to-End Testing: ✅ COMPLETE — all 8 test areas pass, full PM→JuniorDev→SeniorDev pipeline verified live
 - Phase 3: 🔜 NEXT — Voice Layer
 - Active branch: push to current `p1vN` branch
-- Tests passing: 19 (Phase 1) + 47 (Phase 2) = 66 total
+- Tests passing: 19 (Phase 1) + 47 (Phase 2) + 25 (E2E pipeline) = 91 total verified checks
 
 ---
 

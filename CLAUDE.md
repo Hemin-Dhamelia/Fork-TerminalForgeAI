@@ -390,6 +390,22 @@ Built in Phase 4 (TUI). Wired to message bus events in Phase 5.
 - `scripts/agent-repl.js` updated — incoming messages displayed inline with colour-coded banners
 - All message flow tests passing: targeted delivery, subscribeAll fan-out, log persistence, validation
 
+### ✅ End-to-End Testing — COMPLETE (May 2026)
+Full live test suite run against the real stack and real Claude API. All 8 test areas verified:
+
+| # | Test Area | Result | Detail |
+|---|-----------|--------|--------|
+| 1 | Bridge server | ✅ Pass | `/health`, `/volume` (down/up/hold), `/state`, 300ms debounce all working |
+| 2 | All 5 agents — Claude API | ✅ Pass | T1 1797ms · T2 1666ms · T3 2211ms · T4 2264ms · T5 2371ms |
+| 3 | Agent-to-agent messaging | ✅ Pass | `/msg`, `/reply`, targeted delivery, `subscribeAll` fan-out, all validation rejections |
+| 4 | Message bus | ✅ 11/11 | publish/subscribe/readLog/getUnread, invalid agent/type/payload all rejected |
+| 5 | Context injection | ✅ 17/18 | PROJECT, GIT, TASKS, MESSAGES, HANDOFF sections all injected correctly |
+| 6 | Bus monitor | ✅ Pass | History replay, live `subscribeAll`, 500ms cross-process poll all confirmed |
+| 7 | Navigation + state | ✅ 15/15 | DOWN 1→2→3→4→5→1, UP wraparound, HOLD toggle, debounce verified |
+| 8 | Full E2E pipeline | ✅ 25/25 | PM → task → junior-dev (context) → escalation → senior-dev → Claude review |
+
+E2E pipeline confirmed: PM created a task via Claude API → published to junior-dev via message bus → Junior Dev's context injection included the unread task → Junior Dev implemented + escalated via Claude → Senior Dev reviewed and approved via Claude API → full trace in `messages.log`. Zero regressions across all components.
+
 ### 🔜 Phase 3: Voice Layer — NEXT
 Files to build: `voice/vad.py`, `voice/transcriber.py`, `voice/wake-word.py`, `voice/tts.py`, `bridge/hotkey-fallback.js`
 
