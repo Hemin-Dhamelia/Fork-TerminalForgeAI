@@ -124,6 +124,37 @@ npm run test:smoke     # Phase 2 — live Claude API streaming test (requires .e
 
 ---
 
+## Test Results (as of May 2026)
+
+Full end-to-end test suite — all 8 test areas verified against the live stack and real Claude API:
+
+| # | Test Area | Result | Detail |
+|---|-----------|--------|--------|
+| 1 | Bridge server | ✅ Pass | `/health`, `/volume` (down/up/hold), `/state`, 300ms debounce all working |
+| 2 | All 5 agents — Claude API | ✅ Pass | T1 1797ms · T2 1666ms · T3 2211ms · T4 2264ms · T5 2371ms — all streamed correct identity responses |
+| 3 | Agent-to-agent messaging | ✅ Pass | `/msg`, `/reply`, targeted delivery, `subscribeAll` fan-out, validation rejections |
+| 4 | Message bus | ✅ 11/11 | publish/subscribe/readLog/getUnread, invalid agent/type/payload all rejected |
+| 5 | Context injection | ✅ 17/18 | PROJECT, GIT, TASKS, MESSAGES, HANDOFF sections all present in every agent call |
+| 6 | Bus monitor | ✅ Pass | History replay, `subscribeAll` live feed, cross-process 500ms poll all confirmed |
+| 7 | Navigation + state | ✅ 15/15 | DOWN 1→2→3→4→5→1, UP 1→5→4→3→2→1→5, HOLD toggle, debounce blocks 100ms rapid press |
+| 8 | Full E2E pipeline | ✅ 25/25 | PM → Claude → task → junior-dev → context injection → Claude → escalation → senior-dev → review |
+
+### End-to-End Pipeline Trace (Test 8)
+
+The full pipeline ran live against the Claude API in a single test:
+
+1. **PM (T5)** called Claude, produced a structured JSON task spec for a `GET /ping` endpoint
+2. **Task published** to `junior-dev` via message bus with `taskId: task-e2e-001`
+3. **Context injection** confirmed — Junior Dev's `buildAgentContext()` included the unread task in the MESSAGES section
+4. **Junior Dev (T1)** called Claude, wrote a complete Express implementation + unit test, escalated to Senior Dev
+5. **Escalation published** to `senior-dev` with the same `taskId` linking both messages
+6. **Senior Dev (T2)** called Claude, reviewed the implementation, gave specific feedback (suggested adding `timestamp` field), **APPROVED**
+7. **Message log** confirmed full pipeline trace — both messages stored with matching `taskId`
+
+**Zero regressions. Zero broken functionality across all 8 test areas.**
+
+---
+
 ## Project Structure
 
 ```

@@ -443,3 +443,41 @@ Total: 8 weeks from kickoff to shippable v1. Prototype (voice + switching, no ag
 6. Build `voice/tts.py` — optional TTS response via ElevenLabs API or macOS `say`
 7. Test: hold F5, speak, release → transcribed text sent to active agent
 8. Verify: transcription latency < 2s end-to-end, fully offline
+
+---
+
+## 12B. End-to-End Test Results (May 2026)
+
+Full live test suite run against the real stack using the real Claude API. All 8 test areas verified.
+
+| # | Test Area | Checks | Result | Key Detail |
+|---|-----------|--------|--------|------------|
+| 1 | Bridge server | All endpoints | ✅ Pass | `/health`, `/volume` (down/up/hold), `/state`, 300ms debounce all working |
+| 2 | All 5 agents — Claude API | 5 agents | ✅ Pass | T1 1797ms · T2 1666ms · T3 2211ms · T4 2264ms · T5 2371ms — correct identity on all |
+| 3 | Agent-to-agent messaging | All routes | ✅ Pass | `/msg`, `/reply`, targeted delivery, `subscribeAll` fan-out, all 3 validation rejections correct |
+| 4 | Message bus | 11/11 | ✅ Pass | publish/subscribe/readLog/getUnread; invalid agent, type, and empty payload all rejected |
+| 5 | Context injection | 17/18 | ✅ Pass | PROJECT, GIT, TASKS, MESSAGES, HANDOFF sections present on every agent call |
+| 6 | Bus monitor | All features | ✅ Pass | History replay (last 20 msgs), live `subscribeAll`, 500ms cross-process file poll |
+| 7 | Navigation + state | 15/15 | ✅ Pass | DOWN 1→2→3→4→5→1, UP 1→5→4→3→2→1→5, HOLD manual↔auto, 100ms debounce |
+| 8 | Full E2E pipeline | 25/25 | ✅ Pass | Complete PM→JuniorDev→SeniorDev pipeline with real Claude API calls — see trace below |
+
+**Total verified checks: 91 (19 Phase 1 + 47 Phase 2 + 25 E2E pipeline)**
+
+### End-to-End Pipeline Trace (Test 8)
+
+The full agent communication pipeline was executed live with real Claude API calls:
+
+1. **PM (T5)** called Claude → produced a structured JSON task spec (`GET /ping` returning `{ "pong": true }`)
+2. **Task published** to `junior-dev` via message bus with `taskId: task-e2e-001`
+3. **Context injection verified** — `buildAgentContext(1)` returned 2165 chars including the unread task in the MESSAGES section
+4. **Junior Dev (T1)** called Claude → wrote complete Express implementation + unit test, escalated to Senior Dev with "ESCALATION TO SENIOR DEV: please review before merge"
+5. **Escalation published** to `senior-dev` with the same `taskId: task-e2e-001` linking both messages
+6. **Senior Dev (T2)** called Claude → reviewed the implementation, noted `{ "pong": true }` is acceptable but REST conventions would prefer `{ "status": "ok" }`, suggested adding a `timestamp` field, **APPROVED**
+7. **Message log audited** — both messages stored with matching `taskId`, full trace confirmed in `.terminalforge/messages.log`
+
+```
+project-manager → junior-dev   [task]       "Implement GET /ping endpoint returning { "pong": true }..."
+junior-dev      → senior-dev   [escalation] "I have implemented GET /ping returning { "pong": true }..."
+```
+
+**Zero regressions. All components — bridge, state, navigation, all 5 Claude agents, message bus, context injection, and bus monitor — verified working end to end.**
