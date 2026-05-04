@@ -1,1 +1,7 @@
-{"status":"idle","mode":"push-to-talk","recording":false,"updatedAt":"2026-05-03T23:11:55Z"}
+{
+  "status": "idle",
+  "mode": "push-to-talk",
+  "recording": false,
+  "wakeWordDetected": false,
+  "updatedAt": "2026-05-03T23:41:05.047839+00:00"
+}

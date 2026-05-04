@@ -20,7 +20,8 @@ function estimateLines(msg, innerW) {
   const wrapCount = (text) => Math.max(1, Math.ceil((text || ' ').length / Math.max(1, innerW)));
 
   if (msg.role === 'user') {
-    return wrapCount(`> ${msg.text}`);
+    // "you ▸ " prefix = 6 chars
+    return Math.max(1, Math.ceil((msg.text.length + 6) / Math.max(1, innerW)));
   }
   if (msg.role === 'assistant') {
     const raw = msg.text || '';
@@ -61,11 +62,17 @@ function getVisibleEntries(conversation, maxLines, innerW) {
 // -- Render a single conversation entry ----------------------------------------
 
 function ConvLine({ msg, isActive, innerW }) {
+  // User messages: clearly labelled "you ▸ …" so the user can verify what they
+  // typed or what the voice pipeline transcribed. Dim + distinct from agent output.
+  // TTS never speaks this — only the agent's response is spoken aloud.
   if (msg.role === 'user') {
     return (
-      <Text color="cyan" bold wrap={isActive ? 'wrap' : 'truncate'}>
-        &gt; {msg.text}
-      </Text>
+      <Box flexDirection="row" flexShrink={0}>
+        <Text color="cyan" dimColor bold>you ▸ </Text>
+        <Text color="cyan" dimColor wrap={isActive ? 'wrap' : 'truncate'}>
+          {msg.text}
+        </Text>
+      </Box>
     );
   }
 
@@ -151,7 +158,7 @@ export default function AgentPane({
   const flatLines = [];
   for (const msg of conversation) {
     if (msg.role === 'user') {
-      flatLines.push({ type: 'user', text: `> ${msg.text}` });
+      flatLines.push({ type: 'user', text: `you ▸ ${msg.text}` });
     } else if (msg.role === 'assistant') {
       (msg.text || '').split('\n').forEach(l => flatLines.push({ type: 'assistant', text: l || ' ' }));
       if (msg.streaming) flatLines.push({ type: 'cursor', text: '▌' });
