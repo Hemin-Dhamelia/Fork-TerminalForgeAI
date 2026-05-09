@@ -1,35 +1,33 @@
 [
   {
-    "id": "task-001",
-    "title": "Create minimal Node.js HTTP server with GET /ping endpoint",
-    "description": "Create a file named `server.js` in the project root. Use Node.js built-in `http` module (no Express or other frameworks). Implement a GET /ping endpoint that returns JSON { pong: true } with Content-Type: application/json and status 200. Server should listen on port 3000. Handle other routes/methods with 404 response. Include console.log when server starts. Keep it under 30 lines total.",
-    "assignee": "project-manager",
-    "status": "done",
+    "id": "task-g001",
+    "title": "Create greet(name) function in greet.js",
+    "assignee": "junior-dev",
+    "status": "completed",
     "priority": "high",
-    "createdAt": "2026-05-03T16:54:30.000Z",
-    "updatedAt": "2026-05-09T21:35:00.000Z",
-    "completionNotes": "Completed by PM directly due to Ollama unavailability. Created server.cjs (18 lines) using http module. Tested successfully."
+    "description": "Create file greet.js in project root. Export a function greet(name) that returns the string 'Hello, ' + name + '!'. Use CommonJS (module.exports). Keep entire file under 10 lines. Example: greet('World') should return 'Hello, World!'.",
+    "createdAt": "2026-05-03T17:15:00Z",
+    "updatedAt": "2026-05-03T17:15:30Z",
+    "completedAt": "2026-05-03T17:15:30Z"
   },
   {
-    "id": "task-002",
-    "title": "Verify /ping endpoint functionality and edge cases",
-    "description": "Test server.js: 1) Start server and verify GET localhost:3000/ping returns {pong:true} with 200 status. 2) Verify Content-Type is application/json. 3) Test POST /ping returns 404. 4) Test GET /other-route returns 404. 5) Document results in tests/ directory. Server should run with `node server.js` command.",
+    "id": "task-g002",
+    "title": "Verify greet() function with test cases",
     "assignee": "qa-engineer",
-    "status": "done",
+    "status": "pending",
     "priority": "high",
-    "createdAt": "2026-05-03T16:54:30.000Z",
-    "updatedAt": "2026-05-09T21:38:00.000Z",
-    "completionNotes": "Comprehensive testing completed by QA Engineer. Created automated test suite (tests/test-ping-server.js) and detailed test report (tests/test-report-ping-server.md). All 8 tests passed: GET /ping returns correct JSON, Content-Type verified, POST/PUT/DELETE to /ping return 404, undefined routes return 404, all responses are valid JSON. Manual curl verification performed. APPROVED FOR PRODUCTION - no bugs found."
+    "description": "Test greet.js function. Verify: greet('World') returns 'Hello, World!', greet('Alice') returns 'Hello, Alice!', greet('') returns 'Hello, !'. Test with Node.js require(). Document results in 2-3 sentences — pass/fail only.",
+    "createdAt": "2026-05-03T17:15:00Z",
+    "updatedAt": "2026-05-03T17:15:00Z"
   },
   {
-    "id": "task-003",
-    "title": "Add README with run instructions",
-    "description": "Create or update README.md with: 1) Prerequisites (Node.js version). 2) How to start server (`node server.js`). 3) How to test endpoint (`curl localhost:3000/ping`). 4) Expected response. Keep it minimal — 10 lines max. Optional: add .dockerignore and single-stage Dockerfile if it adds value.",
-    "assignee": "project-manager",
-    "status": "done",
+    "id": "task-g003",
+    "title": "Add greet() usage to README",
+    "assignee": "devops-engineer",
+    "status": "pending",
     "priority": "medium",
-    "createdAt": "2026-05-03T16:54:30.000Z",
-    "updatedAt": "2026-05-09T21:35:00.000Z",
-    "completionNotes": "README.md created with prerequisites, run command (node server.cjs), test command, and expected response."
+    "description": "Append a 'greet() Function' section to README.md. Include: file location (greet.js), usage example (const greet = require('./greet'); console.log(greet('World'));), expected output. Keep to 4-5 lines max.",
+    "createdAt": "2026-05-03T17:15:00Z",
+    "updatedAt": "2026-05-03T17:15:00Z"
   }
 ]
