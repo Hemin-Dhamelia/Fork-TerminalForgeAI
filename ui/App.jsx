@@ -28,6 +28,7 @@ import { speak, stopSpeaking } from '../core/tts.js';
 import { subscribe, subscribeAll, unsubscribe, publish, readLog, AGENT_NAMES } from '../core/message-bus.js';
 import { readState, setTerminalStatus, switchTerminal, writeState, readVoiceInput, consumeVoiceInput, readVoiceState, writeVoiceState } from '../core/state.js';
 import { getAgentIdByTerminal } from '../core/context-manager.js';
+import { runOrchestratorLoop } from '../core/orchestrator.js';
 
 import StatusBar      from './StatusBar.jsx';
 import AgentPane      from './AgentPane.jsx';
@@ -358,6 +359,151 @@ export default function App() {
     }));
 
     setIsProcessing(true);
+
+    // ── AUTO MODE on PM (T5): run the full orchestrator loop ────────────────
+    if (mode === 'auto' && terminal === 5) {
+      try {
+        // Helper: add a streaming placeholder for an agent pane and return a token callback
+        const addAgentPlaceholder = (t) => {
+          setConversations(prev => ({
+            ...prev,
+            [t]: [...prev[t], { role: 'assistant', text: '', streaming: true }],
+          }));
+        };
+
+        const appendAgentToken = (t, chunk) => {
+          setConversations(prev => {
+            const conv = [...prev[t]];
+            const last = conv[conv.length - 1];
+            if (last?.role === 'assistant') {
+              conv[conv.length - 1] = { ...last, text: last.text + chunk };
+            }
+            return { ...prev, [t]: conv };
+          });
+        };
+
+        const finaliseAgentPane = (t) => {
+          setConversations(prev => {
+            const conv = [...prev[t]];
+            const last = conv[conv.length - 1];
+            if (last?.role === 'assistant') {
+              conv[conv.length - 1] = { ...last, streaming: false };
+            }
+            return { ...prev, [t]: conv };
+          });
+        };
+
+        // Track which panes have a placeholder so we only add one per task
+        const activePanes = new Set();
+
+        await runOrchestratorLoop(trimmed, {
+
+          // PM planning tokens → T5 pane (placeholder already added above)
+          onPMToken: (chunk) => {
+            setConversations(prev => {
+              const conv = [...prev[5]];
+              const last = conv[conv.length - 1];
+              if (last?.role === 'assistant') {
+                conv[conv.length - 1] = { ...last, text: last.text + chunk };
+              }
+              return { ...prev, [5]: conv };
+            });
+          },
+
+          // Agent tokens → correct agent pane
+          onAgentToken: (t, chunk) => {
+            if (!activePanes.has(t)) {
+              activePanes.add(t);
+              addAgentPlaceholder(t);
+            }
+            appendAgentToken(t, chunk);
+          },
+
+          // Instant color update (before 1s state.json poll catches up)
+          onStatusChange: (t, status) => {
+            setTerminalStatusState(prev => ({ ...prev, [String(t)]: status }));
+          },
+
+          // Dispatch notification in PM pane
+          onDispatch: (task, t) => {
+            finaliseAgentPane(5);
+            setConversations(prev => ({
+              ...prev,
+              [5]: [...prev[5], {
+                role: 'system',
+                text: `v AUTO dispatching ${task.taskId} → T${t} (${task.assignee}): ${task.title}`,
+              }],
+            }));
+          },
+
+          // Task done notification in agent pane
+          onTaskDone: (task, t) => {
+            finaliseAgentPane(t);
+            activePanes.delete(t);
+            setConversations(prev => ({
+              ...prev,
+              [t]: [...prev[t], { role: 'system', text: `v Task ${task.taskId} done` }],
+            }));
+          },
+
+          // Task failed notification in agent pane
+          onTaskFailed: (task, t, err) => {
+            finaliseAgentPane(t);
+            activePanes.delete(t);
+            setConversations(prev => ({
+              ...prev,
+              [t]: [...prev[t], { role: 'system', text: `x Task ${task.taskId} failed: ${err.message}` }],
+            }));
+          },
+
+          // Budget exceeded notification in PM pane
+          onBudgetExceeded: (stepCount, maxSteps) => {
+            setConversations(prev => ({
+              ...prev,
+              [5]: [...prev[5], {
+                role: 'system',
+                text: `x Step budget (${maxSteps}) reached after ${stepCount} steps. Switch to MANUAL or set a new goal.`,
+              }],
+            }));
+            speak(`Autonomous mode paused. Step budget of ${maxSteps} reached.`, { skipClean: true });
+          },
+
+          // All done — summary in PM pane
+          onComplete: ({ stepCount, results }) => {
+            finaliseAgentPane(5);
+            const done   = results.filter(r => r.status === 'done').length;
+            const failed = results.filter(r => r.status === 'failed').length;
+            const summary = results.length === 0
+              ? 'Plan created. No tasks were dispatched (no task list in response).'
+              : `Completed: ${done} done, ${failed} failed across ${stepCount} steps.`;
+            setConversations(prev => ({
+              ...prev,
+              [5]: [...prev[5], { role: 'system', text: `v AUTO complete — ${summary}` }],
+            }));
+            speak(`Autonomous run complete. ${done} tasks done${failed ? `, ${failed} failed` : ''}.`, { skipClean: true });
+          },
+        });
+
+      } catch (err) {
+        setConversations(prev => {
+          const conv = [...prev[terminal]];
+          const last = conv[conv.length - 1];
+          if (last?.role === 'assistant' && last.streaming) {
+            conv[conv.length - 1] = { role: 'system', text: `x ${err.message}` };
+          } else {
+            conv.push({ role: 'system', text: `x ${err.message}` });
+          }
+          return { ...prev, [terminal]: conv };
+        });
+        setTerminalStatusState(prev => ({ ...prev, '5': 'failed' }));
+        speak(`Orchestrator error. ${err.message.slice(0, 120)}`, { skipClean: true });
+      } finally {
+        setIsProcessing(false);
+      }
+      return;
+    }
+
+    // ── MANUAL MODE: direct prompt to the active agent ──────────────────────
     await setTerminalStatus(terminal, 'working').catch(() => {});
     setTerminalStatusState(prev => ({ ...prev, [String(terminal)]: 'working' }));
 
@@ -389,13 +535,11 @@ export default function App() {
       await setTerminalStatus(terminal, 'done').catch(() => {});
       setTerminalStatusState(prev => ({ ...prev, [String(terminal)]: 'done' }));
 
-      // Speak the agent's response aloud (markdown is stripped inside speak())
       if (fullResponse?.trim()) {
         speak(fullResponse);
       }
 
     } catch (err) {
-      // Replace streaming placeholder with error
       setConversations(prev => {
         const conv = [...prev[terminal]];
         const last = conv[conv.length - 1];
@@ -410,12 +554,11 @@ export default function App() {
       await setTerminalStatus(terminal, 'failed').catch(() => {});
       setTerminalStatusState(prev => ({ ...prev, [String(terminal)]: 'failed' }));
 
-      // Announce the failure aloud
       speak(`Something went wrong. ${err.message.slice(0, 120)}`, { skipClean: true });
     } finally {
       setIsProcessing(false);
     }
-  }, [conversations]);
+  }, [conversations, mode]);
 
   // Keep ref in sync so the voice polling effect always calls the latest version
   handleSubmitRef.current = handleSubmit;

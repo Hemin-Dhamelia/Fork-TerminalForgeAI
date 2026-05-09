@@ -1,1 +1,35 @@
-[]
+[
+  {
+    "id": "task-001",
+    "title": "Create minimal Node.js HTTP server with GET /ping endpoint",
+    "description": "Create a file named `server.js` in the project root. Use Node.js built-in `http` module (no Express or other frameworks). Implement a GET /ping endpoint that returns JSON { pong: true } with Content-Type: application/json and status 200. Server should listen on port 3000. Handle other routes/methods with 404 response. Include console.log when server starts. Keep it under 30 lines total.",
+    "assignee": "project-manager",
+    "status": "done",
+    "priority": "high",
+    "createdAt": "2026-05-03T16:54:30.000Z",
+    "updatedAt": "2026-05-09T21:35:00.000Z",
+    "completionNotes": "Completed by PM directly due to Ollama unavailability. Created server.cjs (18 lines) using http module. Tested successfully."
+  },
+  {
+    "id": "task-002",
+    "title": "Verify /ping endpoint functionality and edge cases",
+    "description": "Test server.js: 1) Start server and verify GET localhost:3000/ping returns {pong:true} with 200 status. 2) Verify Content-Type is application/json. 3) Test POST /ping returns 404. 4) Test GET /other-route returns 404. 5) Document results in tests/ directory. Server should run with `node server.js` command.",
+    "assignee": "qa-engineer",
+    "status": "done",
+    "priority": "high",
+    "createdAt": "2026-05-03T16:54:30.000Z",
+    "updatedAt": "2026-05-09T21:38:00.000Z",
+    "completionNotes": "Comprehensive testing completed by QA Engineer. Created automated test suite (tests/test-ping-server.js) and detailed test report (tests/test-report-ping-server.md). All 8 tests passed: GET /ping returns correct JSON, Content-Type verified, POST/PUT/DELETE to /ping return 404, undefined routes return 404, all responses are valid JSON. Manual curl verification performed. APPROVED FOR PRODUCTION - no bugs found."
+  },
+  {
+    "id": "task-003",
+    "title": "Add README with run instructions",
+    "description": "Create or update README.md with: 1) Prerequisites (Node.js version). 2) How to start server (`node server.js`). 3) How to test endpoint (`curl localhost:3000/ping`). 4) Expected response. Keep it minimal — 10 lines max. Optional: add .dockerignore and single-stage Dockerfile if it adds value.",
+    "assignee": "project-manager",
+    "status": "done",
+    "priority": "medium",
+    "createdAt": "2026-05-03T16:54:30.000Z",
+    "updatedAt": "2026-05-09T21:35:00.000Z",
+    "completionNotes": "README.md created with prerequisites, run command (node server.cjs), test command, and expected response."
+  }
+]

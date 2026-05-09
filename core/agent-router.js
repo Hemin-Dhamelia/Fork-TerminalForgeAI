@@ -94,6 +94,36 @@ const sessionHistories = { 1: [], 2: [], 3: [], 4: [], 5: [] };
 const MAX_TOOL_ROUNDS       = 30;
 const MAX_HISTORY_MESSAGES  = 40;
 
+// Retry config for transient API errors (rate limits, 529 overloaded, network blips)
+const MAX_RETRIES    = 3;
+const RETRY_BASE_MS  = 1500; // doubles each attempt: 1.5s → 3s → 6s
+
+const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 529]);
+
+async function withRetry(fn, label) {
+  let lastErr;
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      const status = err.status ?? err.statusCode ?? null;
+      const isRetryable = RETRYABLE_STATUS.has(status)
+        || err.message?.includes('overloaded')
+        || err.message?.includes('rate limit')
+        || err.code === 'ECONNRESET'
+        || err.code === 'ETIMEDOUT';
+
+      if (!isRetryable || attempt === MAX_RETRIES) throw err;
+
+      const delay = RETRY_BASE_MS * Math.pow(2, attempt - 1);
+      debug('%s attempt %d/%d failed (%s) — retrying in %dms', label, attempt, MAX_RETRIES, err.message?.slice(0, 60), delay);
+      await new Promise(r => setTimeout(r, delay));
+    }
+  }
+  throw lastErr;
+}
+
 async function loadAgent(terminalIndex) {
   const loader = AGENT_MODULES[terminalIndex];
   if (!loader) throw new Error(`No agent configured for terminal ${terminalIndex}`);
@@ -142,7 +172,7 @@ const OLLAMA_TOOLS = toOllamaTools(TOOL_DEFINITIONS);
 
 // ── ANTHROPIC streaming + tool use loop ──────────────────────────────────
 
-async function runWithTools_Anthropic(messages, systemPrompt, agent, onToken) {
+async function runWithTools_Anthropic(messages, systemPrompt, agent, onToken, terminalIndex) {
   if (!anthropicClient) {
     throw new Error('ANTHROPIC_API_KEY is not set in .env — cannot use Claude for this agent.');
   }
@@ -152,14 +182,14 @@ async function runWithTools_Anthropic(messages, systemPrompt, agent, onToken) {
     const blocks    = new Map(); // index → accumulated block
     let stopReason  = 'end_turn';
 
-    const stream = await anthropicClient.messages.create({
+    const stream = await withRetry(() => anthropicClient.messages.create({
       model:      agent.MODEL,
       max_tokens: Math.max(agent.MAX_TOKENS ?? 4096, 8192),
       system:     systemPrompt,
       messages,
       tools:      TOOL_DEFINITIONS,
       stream:     true,
-    });
+    }), `anthropic T${terminalIndex} round ${round}`);
 
     for await (const event of stream) {
       switch (event.type) {
@@ -243,7 +273,7 @@ async function runWithTools_Anthropic(messages, systemPrompt, agent, onToken) {
 
 // ── OLLAMA streaming + tool use loop ─────────────────────────────────────
 
-async function runWithTools_Ollama(messages, systemPrompt, onToken) {
+async function runWithTools_Ollama(messages, systemPrompt, onToken, terminalIndex) {
   let fullTextResponse = '';
   const toolsUsed = [];   // track tool names for spoken summary fallback
 
@@ -258,12 +288,12 @@ async function runWithTools_Ollama(messages, systemPrompt, onToken) {
     const toolCalls   = [];   // [{id, name, arguments}]
     let finishReason  = 'stop';
 
-    const stream = await ollamaClient.chat.completions.create({
+    const stream = await withRetry(() => ollamaClient.chat.completions.create({
       model:    OLLAMA_MODEL,
       messages: ollamaMessages,
       tools:    OLLAMA_TOOLS,
       stream:   true,
-    });
+    }), `ollama T${terminalIndex} round ${round}`);
 
     for await (const chunk of stream) {
       const delta = chunk.choices[0]?.delta;
@@ -373,9 +403,9 @@ export async function routePrompt(userPrompt, { terminalIndex, onToken, onDone }
 
   try {
     if (provider === 'anthropic') {
-      fullResponse = await runWithTools_Anthropic(history, systemPrompt, agent, emit);
+      fullResponse = await runWithTools_Anthropic(history, systemPrompt, agent, emit, terminal);
     } else {
-      fullResponse = await runWithTools_Ollama(history, systemPrompt, emit);
+      fullResponse = await runWithTools_Ollama(history, systemPrompt, emit, terminal);
     }
 
     // Trim history to prevent unbounded growth
