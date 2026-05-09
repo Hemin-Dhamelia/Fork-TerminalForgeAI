@@ -7,19 +7,24 @@ It defines the rules, conventions, and context for this project.
 
 ## Project Identity
 
-**Name:** TerminalForge
-**Type:** macOS terminal-based multi-agent AI development platform
-**Version:** v1.0 (in development)
+**Name:** TerminalForge (codename: FORGE)
+**Type:** macOS terminal-based multi-agent AI development platform — v1 terminal, v2 JARVIS web app
+**Version:** v1.0 (terminal app, in final polish) · v2.0 (web app, planned)
 **Language:** Node.js 18+ (primary), Python 3.11+ (voice pipeline)
 
 **Fork repo (your working copy):** https://github.com/Hemin-Dhamelia/Fork-TerminalForgeAI.git
 **Upstream main repo:** https://github.com/TerminalForgeAI/TerminalForgeAI.git
 
+### JARVIS Vision (v2 Web App)
+The long-term UI goal is a **JARVIS-style 3D web interface** — holographic floating panels, constantly animated agent orbs, arc-reactor status rings, particle systems, cinematic camera depth, and glowing circuit-board aesthetics. Built with Three.js / React Three Fiber on top of the same shared agent core. The terminal app is v1 (local power-user tool); the web app is v2 (browser-accessible, deployable on Vercel). Both run on identical agent logic via a shared `packages/core` monorepo.
+
 ---
 
 ## What This Project Does
 
-TerminalForge runs 5 AI agents (Junior Dev, Senior Dev, QA Engineer, DevOps Engineer, Project Manager) in a single macOS terminal session. Users navigate between agents using iPhone volume buttons. Voice input (faster-whisper, local) and text input are both supported. Agents communicate with each other via an in-process EventEmitter message bus. The PM agent can orchestrate the full team autonomously. A dedicated Bus Monitor window shows all inter-agent traffic in real time.
+**v1 (Terminal — current):** TerminalForge runs 5 AI agents (Junior Dev, Senior Dev, QA Engineer, DevOps Engineer, Project Manager) in a single macOS terminal session. Users navigate between agents using iPhone volume buttons. Voice input (faster-whisper, local) and text input are both supported. Agents communicate with each other via an in-process EventEmitter message bus. The PM agent can orchestrate the full team autonomously. A dedicated Bus Monitor window shows all inter-agent traffic in real time.
+
+**v2 (Web App — planned):** A JARVIS-style 3D web interface deployed on Vercel. Same 5 agents, same orchestration logic, same message bus semantics — but with a cinematic Three.js UI: floating holographic panels per agent, animated communication arcs between agents, arc-reactor status indicators, particle systems, and full voice I/O via the Web Speech API. Shared `packages/core` monorepo connects both apps.
 
 ---
 
@@ -366,7 +371,7 @@ Built in Phase 4 (TUI). Wired to message bus events in Phase 5.
 
 ## Current Build Phase
 
-> **Phase 3: Voice Layer — NEXT**
+> **Phase 5: PM Orchestrator Loop + TUI Color Wiring — IMMEDIATE NEXT**
 
 ### ✅ Phase 1: Foundation — COMPLETE
 - `core/state.js`, `bridge/server.js`, `core/event-listener.js`
@@ -375,8 +380,10 @@ Built in Phase 4 (TUI). Wired to message bus events in Phase 5.
 
 ### ✅ Phase 2: Agent Engine — COMPLETE
 - All 5 agent files with system prompts and identity configs
-- `core/agent-router.js` — streaming Claude API sessions, 20-msg rolling history per terminal
+- `core/agent-router.js` — streaming Claude API sessions (Anthropic + Ollama), 20-msg rolling history per terminal
 - `core/context-manager.js` — git + handoffs + tasks + messages injected per call
+- `core/tools.js` — 8 local file/shell tools available to all agents
+- `core/tts.js` — macOS say / ElevenLabs TTS with startup greeting
 - 47 tests passing + live smoke test against real Claude API
 
 ### ✅ Launcher Scripts — COMPLETE (bonus, beyond original plan)
@@ -390,23 +397,33 @@ Built in Phase 4 (TUI). Wired to message bus events in Phase 5.
 - `scripts/agent-repl.js` updated — incoming messages displayed inline with colour-coded banners
 - All message flow tests passing: targeted delivery, subscribeAll fan-out, log persistence, validation
 
+### ✅ Phase 3: Voice Layer — COMPLETE (May 2026)
+- `voice/pipeline.py` — push-to-talk / auto-vad / wake-word coordinator
+- `voice/transcriber.py` — faster-whisper local offline STT, < 2s latency
+- `voice/vad.py` — silero-vad speech detection
+- `voice/wake-word.py` — "Hey Forge" openWakeWord detection
+- `bridge/hotkey-fallback.js` — spacebar push-to-talk controller
+- TUI auto-submits transcribed text via 500ms voice_input.json poll
+- StatusBar shows live voice indicator: 👂/🎤/⌨
+
 ### ✅ Phase 4: TUI — COMPLETE (May 2026)
 - `ui/App.jsx` — root Ink component, full layout, state management, keyboard nav
 - `ui/AgentPane.jsx` — per-agent pane: active (streaming + input) / inactive (compact)
-- `ui/StatusBar.jsx` — top bar: active agent, mode, mini status dots, key hints
+- `ui/StatusBar.jsx` — top bar: active agent, mode, provider badge [C]/[O], mini status dots, voice indicator
 - `ui/BusMonitorPanel.jsx` — right column live message feed, all 6 message types
-- `ui/TerminalColorManager.jsx` — status -> colour/label/dot mappings
-- `scripts/ui.js` — entry point, cursor hide/restore, SIGINT cleanup
+- `ui/TerminalColorManager.jsx` — status → colour/label/dot mappings
+- `scripts/ui.js` — entry point, TTS greeting, cursor hide/restore, SIGINT cleanup
 - Launch: `npm run ui` — single fullscreen window, all 5 agents + bus monitor
 - Keys: Tab = next agent, Shift+Tab = previous, Enter = submit, Ctrl+C = quit
-- Active pane: double border + wider + input box + full streaming output
-- Inactive panes: compact, single border, last N lines + status colour badge
-- Status colours live: yellow = working, green = done, red = failed, grey = idle
-- All panes connected via existing message bus (subscribeAll + per-agent subscribe)
-- Bridge server vol-button switches sync via 1s state.json poll
+
+### ✅ Extras — COMPLETE (May 2026)
+- Ollama support in `core/agent-router.js` — per-agent provider override via `AGENT_N_PROVIDER`
+- Provider badges [C] / [O] in each agent pane header
+- Mixed mode: Claude + Ollama simultaneously
+- `scripts/start.sh` — one-command launcher: deps check, env validation, bridge + voice + TUI
 
 ### ✅ End-to-End Testing — COMPLETE (May 2026)
-Full live test suite run against the real stack and real Claude API. All 8 test areas verified:
+All 8 test areas verified against live stack + real Claude API. 91 total checks. Zero regressions.
 
 | # | Test Area | Result | Detail |
 |---|-----------|--------|--------|
@@ -419,34 +436,48 @@ Full live test suite run against the real stack and real Claude API. All 8 test 
 | 7 | Navigation + state | ✅ 15/15 | DOWN 1→2→3→4→5→1, UP wraparound, HOLD toggle, debounce verified |
 | 8 | Full E2E pipeline | ✅ 25/25 | PM → task → junior-dev (context) → escalation → senior-dev → Claude review |
 
-E2E pipeline confirmed: PM created a task via Claude API → published to junior-dev via message bus → Junior Dev's context injection included the unread task → Junior Dev implemented + escalated via Claude → Senior Dev reviewed and approved via Claude API → full trace in `messages.log`. Zero regressions across all components.
-
-### 🔜 Phase 3: Voice Layer — NEXT
-Files to build: `voice/vad.py`, `voice/transcriber.py`, `voice/wake-word.py`, `voice/tts.py`, `bridge/hotkey-fallback.js`
-
-Do NOT move to Phase 4 until Phase 3 success criteria are confirmed:
-- Hold F5, speak, release → transcribed text sent to active agent
-- Transcription latency < 2 seconds end-to-end
-- Works fully offline (local faster-whisper model)
-
-### 🔜 Phase 4: TUI
-Files to build: all `ui/*.js` components using Ink (React-for-terminal)
-
-### 🔜 Phase 5: Agent Communication (message bus core ✅ done — finish PM orchestrator loop)
-Remaining: PM orchestrator loop in `agents/project-manager.js`, wiring bus events to TUI colour state
+### 🔨 Phase 5: Agent Communication — IN PROGRESS (Immediate Next)
+Remaining work:
+1. **PM Orchestrator Loop** — `agents/project-manager.js`: receive high-level goal → create task list → dispatch via `publish()` → enforce max-step budget (20) → log every decision to `messages.log`
+2. **TUI Colour Wiring** — wire `task:dispatched` / `task:done` / `task:failed` bus events to `setTerminalStatus()` in `core/state.js` so TUI panels turn yellow/green/red in real time
 
 ### 🔜 Phase 6: Polish
-Error handling, retry logic, `docs/QUICKSTART.md`, end-to-end demo
+- Error handling and retry logic across all API calls
+- `docs/QUICKSTART.md` — new user onboarding guide
+- Graceful degradation when Anthropic API is unreachable
+- End-to-end demo project (CRUD web app built fully via TerminalForge)
+
+### 🔜 Phase 7: Web App Deployment (Monorepo)
+Restructure to `packages/core` + `apps/terminal` + `apps/web`:
+- Extract shared agent logic into `packages/core`
+- Build `apps/web` with Next.js + Vercel KV + Upstash Redis pub/sub
+- Deploy on Vercel — same 5 agents accessible from any browser
+- iPhone volume buttons still work (iOS Shortcut → Vercel API endpoint)
+- Voice via Web Speech API (browser STT/TTS, no Python required)
+
+### 🔜 Phase 8: JARVIS 3D Web UI
+The cinematic web interface on top of Phase 7's backend:
+- **3D scene**: Three.js + React Three Fiber — always-animated, never static
+- **Agent orbs**: 5 floating holographic spheres, one per agent, orbit a central arc-reactor core
+- **Communication arcs**: animated particle streams fly between agents when messages are published
+- **Holographic panels**: glass-morphism panels with depth + parallax for agent output streams
+- **Status rings**: arc-reactor-style concentric rings pulse yellow/green/red per agent task state
+- **Ambient motion**: continuous ambient rotation, particle field, circuit-board grid floor
+- **Color palette**: deep navy + electric cyan + gold accents + neon particle trails
+- **Camera**: auto-focus on active agent; smooth cinematic transitions on agent switch
+- **Voice UI**: waveform visualizer floats in 3D space when recording
+- **Tech stack**: Next.js + Three.js + React Three Fiber + @react-three/drei + Framer Motion + Vercel
 
 ---
 
-## Do Not Touch
+## Do Not Touch (v1 Terminal App)
 
 - Never modify `.terminalforge/` files directly — always use `core/state.js` and `core/context-manager.js`
-- Never add a GUI, web interface, or Electron wrapper — terminal only in v1
-- Never use an external message broker (Redis, RabbitMQ, etc.) — EventEmitter only
+- Never add web/Electron code into the terminal app codebase — web app lives in `apps/web/` (Phase 7+)
+- Never use an external message broker (Redis, RabbitMQ, etc.) in the terminal app — EventEmitter only
 - Never add Windows or Linux-specific code in v1 — macOS first
 - Never run parallel agent output — one agent active at a time
+- Never mix terminal app and web app adapters in the same files — adapter pattern separates them cleanly
 
 ---
 

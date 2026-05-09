@@ -1,8 +1,8 @@
-# TerminalForge — Project Plan v4.1
+# TerminalForge — Project Plan v5.0
 
-**Multi-Agent AI Development Platform**
-Voice + Text Input · Volume Button Switching · Agent-to-Agent Communication · Real-Time Observability
-*Project Plan v4.1 · May 2026*
+**Multi-Agent AI Development Platform · JARVIS Web App Roadmap**
+Voice + Text Input · Volume Button Switching · Agent-to-Agent Communication · Real-Time Observability · 3D JARVIS Web UI
+*Project Plan v5.0 · May 2026*
 
 **GitHub Repositories**
 - Fork (Working Copy): https://github.com/Hemin-Dhamelia/Fork-TerminalForgeAI.git
@@ -12,13 +12,35 @@ Voice + Text Input · Volume Button Switching · Agent-to-Agent Communication ·
 
 ## 1. Executive Summary
 
-TerminalForge is a macOS terminal-based multi-agent AI development platform. Five specialized AI agents — Junior Developer, Senior Developer, QA Engineer, DevOps Engineer, and Project Manager — run as a unified team in a single terminal session, each powered by the Anthropic Claude API with distinct system prompts and memory.
+TerminalForge is a macOS terminal-based multi-agent AI development platform with a JARVIS-style 3D web app on the roadmap. Five specialized AI agents — Junior Developer, Senior Developer, QA Engineer, DevOps Engineer, and Project Manager — run as a unified team in a single terminal session, each powered by the Anthropic Claude API with distinct system prompts and memory.
 
 You interact with the agents by typing commands as text or by speaking using real-time voice input transcribed by faster-whisper. You navigate between agent terminals using your iPhone's physical Volume buttons — Volume DOWN steps forward (Terminal 1→2→3→4→5), Volume UP steps backward (5→4→3→2→1), wrapping around at each end.
 
 The agents communicate through a shared in-process message bus. A dedicated Bus Monitor window shows all inter-agent traffic in real time. The Project Manager agent acts as orchestrator in Autonomous Mode, automatically dispatching tasks to the appropriate agents and routing work through a full development pipeline.
 
-### 1A. GitHub Repository Structure
+### 1A. JARVIS Vision — v2 Web App
+
+The long-term UI goal for TerminalForge is a **JARVIS-style 3D web interface** — a cinematic, constantly animated browser application inspired by Tony Stark's AI assistant.
+
+**What it looks like:**
+- Five holographic agent orbs float in a 3D scene, orbiting a central arc-reactor core
+- Animated particle streams arc between orbs when agents send messages to each other
+- Each orb pulses with arc-reactor-style concentric rings — yellow when working, green when done, red on failure
+- Glass-morphism holographic panels display each agent's streaming output with depth and parallax
+- A circuit-board grid floor with ambient glow provides spatial context
+- The camera auto-focuses on the active agent with smooth cinematic transitions
+- A 3D waveform visualizer appears in space when voice input is recording
+- Deep navy blue + electric cyan + gold neon palette — every element in constant, fluid motion
+
+**How it connects to v1:**
+The terminal app and web app share the same `packages/core` — identical agent system prompts, Anthropic API calls, message bus semantics, context injection logic, and tool definitions. Only the infrastructure adapters (storage, pub/sub, voice I/O) and UI layers differ between platforms.
+
+**Tech stack for v2 JARVIS UI:**
+Three.js + React Three Fiber + @react-three/drei + Next.js 14 (App Router) + Vercel KV + Upstash Redis + Web Speech API + Framer Motion + GSAP + Vercel deployment
+
+---
+
+### 1B. GitHub Repository Structure
 
 TerminalForge uses a forked repository workflow:
 
@@ -353,14 +375,18 @@ The Bus Monitor is a dedicated terminal window that shows all inter-agent messag
 | Phase | Name | Timeline | Key Deliverables | Milestone | Status |
 |---|---|---|---|---|---|
 | Phase 1 | Foundation | Weeks 1–2 | Bluetooth bridge, vol event listener, Claude API streaming test | Core infra | ✅ COMPLETE |
-| Phase 2 | Agent Engine | Weeks 3–4 | 5 agent sessions w/ system prompts, shared context store, git integration | Agents live | ✅ COMPLETE |
+| Phase 2 | Agent Engine | Weeks 3–4 | 5 agent sessions w/ system prompts, shared context store, git integration, tools, TTS, Ollama support | Agents live | ✅ COMPLETE |
 | Bonus | Launcher + Observability | Week 4 | 7-window launch script, tmux layout, bus monitor, inline REPL banners, /msg /reply commands | Full visibility | ✅ COMPLETE |
-| Phase 3 | Voice Layer | Week 5 | Mic → faster-whisper → agent prompt; silero-vad; wake word; optional TTS | Voice works | ✅ COMPLETE |
-| Phase 4 | TUI + Colour | Week 6 | Ink TUI: agent badge, mode indicator, streaming output; terminal colour system; vol button wired end-to-end | Full UX ready | ✅ COMPLETE |
-| Phase 5 | Agent Comms | Week 7 | PM orchestrator loop, auto-dispatch, agent handoff protocol; colour events wired (message bus core ✅ done) | Agents talk | 🔜 |
-| Phase 6 | Polish & Docs | Week 8 | Error handling, logging, onboarding guide, demo project (full web app built end-to-end) | Shippable v1 | 🔜 |
+| Phase 3 | Voice Layer | Week 5 | Mic → faster-whisper → agent prompt; silero-vad; wake word; push-to-talk; optional TTS | Voice works | ✅ COMPLETE |
+| Phase 4 | TUI + Colour | Week 6 | Ink TUI: agent badge, mode indicator, provider badges, streaming output; terminal colour system; vol button wired | Full UX ready | ✅ COMPLETE |
+| Phase 5 | Agent Comms | Week 7 | PM orchestrator loop, auto-dispatch, bus events → TUI colour state wiring | Agents talk | 🔨 NEXT |
+| Phase 6 | Polish & Docs | Week 8 | Error handling, retry logic, QUICKSTART.md, end-to-end demo project | Shippable v1 | 🔜 |
+| Phase 7 | Web App Deployment | Weeks 9–10 | Monorepo (`packages/core` + `apps/terminal` + `apps/web`), Next.js, Vercel KV, Upstash Redis, Vercel deploy | v1 on the web | 🔜 |
+| Phase 8 | JARVIS 3D Web UI | Weeks 11–13 | Three.js + React Three Fiber: 5 agent orbs, arc-reactor rings, particle comms, holographic panels, 3D voice viz | JARVIS live | 🔜 |
 
-Total: 8 weeks from kickoff to shippable v1. Prototype (voice + switching, no agent comms): 2–3 weeks.
+**v1 terminal app:** Phases 1–6 · 8 weeks from kickoff to shippable.  
+**v2 web app:** Phases 7–8 · adds ~4–5 weeks on top.  
+**Full JARVIS experience:** ~13 weeks total.
 
 ---
 
@@ -450,13 +476,22 @@ pip install -r requirements.txt   # one-time Python dep install
 ./start.sh --voice=wake           # "Hey Forge" wake word
 ```
 
-### Next Steps — Phase 5: PM Orchestrator Loop
+### Next Steps — Phase 5: PM Orchestrator Loop (IMMEDIATE)
 
-1. Build PM orchestrator loop in `agents/project-manager.js` — receive high-level goal, create task list, dispatch with `publish()`
-2. Wire `task:dispatched`, `task:done`, `task:failed` bus events to `terminalStatus` in `state.json`
-3. Enforce max-step budget of 20 (configurable in `.terminalforge/config.json`)
-4. PM must log every dispatch decision to `messages.log`
-5. Test: give PM a goal → watch agents execute autonomously in the TUI
+1. **PM orchestrator loop** in `agents/project-manager.js`:
+   - In AUTO mode, receive a high-level goal via the TUI input box
+   - Parse the goal, produce a structured task list (array of `{ agentId, type, payload, taskId }`)
+   - Dispatch each task via `publish()` to the correct agent
+   - Track completion: subscribe to `task:done` and `task:failed` events per taskId
+   - Enforce max-step budget (default 20, configurable in `.terminalforge/config.json`)
+   - Log every dispatch decision to `messages.log` as a `summary` type message
+   - On budget exceeded: stop and send a `summary` message to the user asking for direction
+2. **TUI colour wiring**:
+   - In `core/state.js` or `core/agent-router.js`: call `setTerminalStatus(N, 'working')` when a task is dispatched to terminal N
+   - Call `setTerminalStatus(N, 'done')` when `task:done` fires for that terminal
+   - Call `setTerminalStatus(N, 'failed')` on API error or `task:failed` event
+   - TUI polls `state.json` every 1s — colours will update automatically once state is written
+3. **Test**: give PM a goal in AUTO mode → watch 5 panes turn yellow/green in sequence autonomously
 
 ---
 
@@ -1065,3 +1100,160 @@ brew install ollama
 ollama pull qwen2.5-coder:7b   # recommended model
 npm run go:ollama
 ```
+
+---
+
+## 14. Phase 7 — Web App Deployment Plan
+
+### 14.1 Architecture: Monorepo with Shared Core
+
+```
+terminalforge/
+├── packages/
+│   └── core/                    ← shared, platform-agnostic business logic
+│       ├── agents/              ← 5 system prompts (pure data, reused as-is)
+│       ├── agent-router.js      ← Anthropic API streaming (reused)
+│       ├── context-manager.js   ← context injection logic (adapted)
+│       ├── message-bus.js       ← interface + validation only
+│       ├── state.js             ← schema + logic only
+│       └── tools.js             ← tool definitions
+│
+├── apps/
+│   ├── terminal/                ← current local CLI (refactored, unchanged UX)
+│   │   └── adapters/
+│   │       ├── storage.js       ← reads/writes .terminalforge/*.json
+│   │       ├── bus.js           ← EventEmitter + messages.log
+│   │       └── voice.js         ← Python pipeline bridge
+│   │
+│   └── web/                     ← new Next.js app (Vercel)
+│       └── adapters/
+│           ├── storage.ts       ← Vercel KV (Redis)
+│           ├── bus.ts           ← Upstash Redis pub/sub
+│           └── voice.ts         ← Web Speech API
+```
+
+### 14.2 Adapter Interface Pattern
+
+Each platform swaps only the infrastructure layer:
+
+| Concern | Interface | Terminal Adapter | Web Adapter |
+|---|---|---|---|
+| State storage | `read()` / `write()` | `.terminalforge/state.json` | Vercel KV |
+| Message bus | `publish()` / `subscribe()` | EventEmitter + messages.log | Upstash Redis pub/sub |
+| Voice input | `onTranscription(cb)` | Python pipeline → bridge | Web Speech API |
+| TTS output | `speak(text)` | macOS `say` / ElevenLabs | SpeechSynthesis API |
+| Git context | `getGitSummary()` | simple-git (local) | GitHub API |
+| File tools | `read_file()` etc. | local fs | GitHub API + Vercel Blob |
+| LLM provider | `streamResponse()` | Anthropic + Ollama | Anthropic + Groq |
+
+### 14.3 What's Shared (Zero Duplication)
+
+- All 5 agent system prompts
+- Message envelope format + validation
+- Anthropic API streaming calls
+- Tool definitions (names + descriptions)
+- Autonomous mode rules + step budget logic
+- Context injection logic (with adapter-injected git/storage)
+
+### 14.4 New Web Infrastructure
+
+| Current | Web Replacement |
+|---|---|
+| `.terminalforge/state.json` | Vercel KV (persistent key-value) |
+| EventEmitter + messages.log | Upstash Redis pub/sub |
+| stdout streaming | Server-Sent Events (SSE) |
+| Express :3333 | Next.js API routes |
+| Python voice pipeline | Web Speech API |
+| macOS `say` TTS | SpeechSynthesis API |
+| simple-git (local) | GitHub API |
+| Ollama (local GPU) | Groq API (fast, cheap) |
+| iPhone vol → localhost | iPhone Shortcuts → Vercel API endpoint |
+
+### 14.5 Deployment
+
+```bash
+# apps/web
+vercel deploy                # deploy to Vercel
+vercel env add ANTHROPIC_API_KEY
+vercel env add UPSTASH_REDIS_REST_URL
+vercel env add UPSTASH_REDIS_REST_TOKEN
+```
+
+Volume button iPhone Shortcut: `POST https://your-app.vercel.app/api/volume` (same payload, same logic — works remotely).
+
+---
+
+## 15. Phase 8 — JARVIS 3D Web UI
+
+### 15.1 Vision
+
+A cinematic, constantly-animated 3D interface inspired by JARVIS from Iron Man. Every element is in motion. Nothing is static. The UI conveys intelligence, speed, and power.
+
+### 15.2 3D Scene Architecture
+
+```
+Three.js Scene (React Three Fiber)
+├── ArcReactorCore             ← central spinning reactor — pulsing ambient light
+├── AgentOrbs[5]               ← 5 holographic spheres orbiting the core
+│   ├── OrbRing                ← animated status ring (yellow/green/red)
+│   ├── OrbLabel               ← agent name + emoji floating billboard
+│   └── OrbGlow                ← bloom shader, intensity = task activity
+├── CommArcs                   ← particle streams between orbs on message publish
+├── HolographicPanels[5]       ← floating glass panels with agent output streams
+│   ├── GlassPanel             ← frosted glass morphism with depth
+│   ├── StreamText             ← streaming Claude response character-by-character
+│   └── StatusRing             ← arc-reactor rings per panel
+├── VoiceWaveform              ← 3D waveform viz — appears when recording
+├── CircuitFloor               ← animated circuit-board grid, ambient glow
+└── ParticleField              ← ambient particle drift throughout scene
+```
+
+### 15.3 Key Animations
+
+| Element | Animation | Trigger |
+|---|---|---|
+| Agent orbs | Constant slow orbit around core | Always |
+| Status rings | Pulse speed + color change | task:dispatched / task:done / task:failed |
+| Comm arcs | Particle stream fires between orbs | message published on bus |
+| Active orb | Camera zooms/focuses toward it | Agent switch |
+| Glass panels | Parallax depth shift | Mouse/device tilt |
+| Core reactor | Spin speed increases | AUTO mode active |
+| Voice waveform | Waveform pulses with mic amplitude | Recording in progress |
+| Circuit floor | Grid lines flow toward active orb | Active agent changes |
+
+### 15.4 Color System
+
+| Element | Color | Notes |
+|---|---|---|
+| Background | `#020818` (deep navy) | Near-black with blue tint |
+| Orb idle | `#00d4ff` (electric cyan) | Each orb base color |
+| Orb working | `#ffd700` (gold) | Pulsing yellow ring |
+| Orb done | `#00ff88` (neon green) | Flash + settle |
+| Orb failed | `#ff3366` (neon red) | Alert pulse |
+| Comm arcs | `#00d4ff` → `#a855f7` (cyan to purple) | Gradient particle streams |
+| Core | `#00d4ff` with bloom | Arc-reactor cyan glow |
+| Glass panels | `rgba(0,212,255,0.05)` + border | Frosted holographic glass |
+| Text | `#e0f7ff` | Near-white with blue tint |
+
+### 15.5 Tech Stack
+
+```json
+{
+  "three": "^0.165.0",
+  "@react-three/fiber": "^8.16.0",
+  "@react-three/drei": "^9.107.0",
+  "@react-three/postprocessing": "^2.16.0",
+  "framer-motion": "^11.0.0",
+  "gsap": "^3.12.0",
+  "next": "^14.2.0",
+  "react": "^18.3.0",
+  "tailwindcss": "^3.4.0"
+}
+```
+
+### 15.6 Performance Targets
+
+- 60fps at 1440p on M-series Mac
+- < 3s initial load (three.js lazy loaded)
+- Mobile responsive (2D fallback mode for phones)
+- Accessible: `prefers-reduced-motion` disables non-essential animations
