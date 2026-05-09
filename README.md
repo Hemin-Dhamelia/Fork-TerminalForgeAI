@@ -1,8 +1,19 @@
-# TerminalForge
+# TerminalForge (FORGE)
 
-**macOS terminal-based multi-agent AI development platform**
+**macOS terminal-based multi-agent AI development platform — with a JARVIS 3D web app on the roadmap**
 
 Five specialized AI agents run as a unified dev team in a single terminal session, each powered by the Anthropic Claude API. Navigate between agents using iPhone Volume buttons. Speak or type your prompts. Watch agents communicate with each other in real time.
+
+---
+
+## Vision: FORGE as JARVIS
+
+The long-term goal is a **JARVIS-style 3D web interface** — inspired by Iron Man's AI assistant. Imagine five holographic agent orbs floating in a 3D scene, orbiting a central arc-reactor core. Animated particle streams arc between agents when they communicate. Status rings pulse yellow, green, and red in real time. Your voice waveform visualizes in 3D space as you speak. Every element in constant motion. Deployed on Vercel, accessible from any browser.
+
+**v1 (now):** Terminal app — Ink TUI, offline voice, Ollama support, iPhone volume buttons.  
+**v2 (next):** Webapp — JARVIS 3D UI with Three.js + React Three Fiber + same agent core.
+
+---
 
 ---
 
@@ -464,12 +475,14 @@ The full pipeline ran live against the Claude API in a single test:
 | Phase | Name | Status |
 |---|---|---|
 | Phase 1 | Foundation — bridge, state, event listener | ✅ Complete |
-| Phase 2 | Agent Engine — 5 Claude sessions, context, git | ✅ Complete |
-| Bonus | Launcher scripts + observability layer | ✅ Complete |
-| Phase 3 | Voice Layer — faster-whisper, silero-vad, push-to-talk | ✅ Complete |
-| Phase 4 | TUI — Ink components, terminal colour system | ✅ Complete |
-| Phase 5 | Agent Comms — PM orchestrator loop (bus core ✅ done) | 🔜 |
-| Phase 6 | Polish — error handling, QUICKSTART.md, demo | 🔜 |
+| Phase 2 | Agent Engine — 5 Claude sessions, context, git, tools, TTS | ✅ Complete |
+| Bonus | Launcher scripts + observability layer + Ollama support | ✅ Complete |
+| Phase 3 | Voice Layer — faster-whisper, silero-vad, push-to-talk, wake-word | ✅ Complete |
+| Phase 4 | TUI — Ink components, terminal colour system, provider badges | ✅ Complete |
+| Phase 5 | Agent Comms — PM orchestrator loop + TUI colour wiring | 🔨 Next |
+| Phase 6 | Polish — error handling, retry logic, QUICKSTART.md, demo | 🔜 |
+| Phase 7 | Web App — monorepo, Next.js, Vercel KV, Vercel deployment | 🔜 |
+| Phase 8 | JARVIS 3D UI — Three.js, React Three Fiber, holographic interface | 🔜 |
 
 ---
 
