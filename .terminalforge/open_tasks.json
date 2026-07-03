@@ -1,33 +1,10 @@
 [
   {
-    "id": "task-g001",
-    "title": "Create greet(name) function in greet.js",
+    "id": "task-test-001",
+    "title": "Implement GET /ping",
     "assignee": "junior-dev",
-    "status": "completed",
-    "priority": "high",
-    "description": "Create file greet.js in project root. Export a function greet(name) that returns the string 'Hello, ' + name + '!'. Use CommonJS (module.exports). Keep entire file under 10 lines. Example: greet('World') should return 'Hello, World!'.",
-    "createdAt": "2026-05-03T17:15:00Z",
-    "updatedAt": "2026-05-03T17:15:30Z",
-    "completedAt": "2026-05-03T17:15:30Z"
-  },
-  {
-    "id": "task-g002",
-    "title": "Verify greet() function with test cases",
-    "assignee": "qa-engineer",
     "status": "pending",
     "priority": "high",
-    "description": "Test greet.js function. Verify: greet('World') returns 'Hello, World!', greet('Alice') returns 'Hello, Alice!', greet('') returns 'Hello, !'. Test with Node.js require(). Document results in 2-3 sentences — pass/fail only.",
-    "createdAt": "2026-05-03T17:15:00Z",
-    "updatedAt": "2026-05-03T17:15:00Z"
-  },
-  {
-    "id": "task-g003",
-    "title": "Add greet() usage to README",
-    "assignee": "devops-engineer",
-    "status": "pending",
-    "priority": "medium",
-    "description": "Append a 'greet() Function' section to README.md. Include: file location (greet.js), usage example (const greet = require('./greet'); console.log(greet('World'));), expected output. Keep to 4-5 lines max.",
-    "createdAt": "2026-05-03T17:15:00Z",
-    "updatedAt": "2026-05-03T17:15:00Z"
+    "description": "Return { pong: true }"
   }
 ]
