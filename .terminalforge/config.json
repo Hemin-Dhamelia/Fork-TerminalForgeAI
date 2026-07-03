@@ -1,11 +1,3 @@
 {
-  "maxSteps": 20,
-  "voiceMode": "push-to-talk",
-  "ttsEnabled": true,
-  "ttsProvider": "say",
-  "ttsVoice": "Alex",
-  "ttsRate": 185,
-  "ttsMaxChars": 420,
-  "debounceMs": 300,
-  "contextHandoffCount": 3
+  "maxSteps": 20
 }
